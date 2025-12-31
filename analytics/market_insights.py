@@ -15,7 +15,7 @@ import pandas as pd
 import numpy as np
 from pydantic import BaseModel, Field
 
-from data.schemas import Property, PropertyCollection, PropertyType
+from data.schemas import PropertyCollection
 
 
 class TrendDirection(str, Enum):
@@ -146,9 +146,11 @@ class MarketInsights:
                 max_price=0,
                 std_dev=0,
                 avg_rooms=0,
+                avg_area=None,
                 parking_percentage=0,
                 garden_percentage=0,
-                furnished_percentage=0
+                furnished_percentage=0,
+                avg_price_per_sqm=None,
             )
 
         # Calculate price per sqm where area is available
@@ -203,7 +205,6 @@ class MarketInsights:
         # Calculate basic statistics
         avg_price = float(df['price'].mean())
         median_price = float(df['price'].median())
-        std_dev = float(df['price'].std())
 
         # Simple trend detection (comparing first half vs second half)
         mid_point = len(df) // 2
@@ -390,7 +391,6 @@ class MarketInsights:
             grouped['zscore'] = (grouped['avg_price'] - mu) / sd
             grouped['anomaly'] = grouped['zscore'].abs() >= z_threshold
         return grouped
-        return grouped
 
     def get_property_type_insights(self, property_type: str) -> Optional[PropertyTypeInsights]:
         """
@@ -456,11 +456,10 @@ class MarketInsights:
         amenities = ['has_parking', 'has_garden', 'has_pool', 'is_furnished', 'has_balcony', 'has_elevator']
         impact = {}
 
-        overall_avg = float(self.df['price'].mean())
-
         for amenity in amenities:
-            with_amenity = self.df[self.df[amenity] == True]['price'].mean()
-            without_amenity = self.df[self.df[amenity] == False]['price'].mean()
+            mask = self.df[amenity].fillna(False).astype(bool)
+            with_amenity = self.df[mask]['price'].mean()
+            without_amenity = self.df[~mask]['price'].mean()
 
             if pd.notna(with_amenity) and pd.notna(without_amenity) and without_amenity > 0:
                 percent_diff = float(((with_amenity - without_amenity) / without_amenity) * 100)
@@ -505,7 +504,12 @@ class MarketInsights:
         # Get top properties
         top_properties = df_with_score.nlargest(top_n, 'value_score')
 
-        return top_properties[['city', 'price', 'rooms', 'property_type', 'amenity_count', 'value_score']].to_dict('records')
+        records = top_properties[
+            ['city', 'price', 'rooms', 'property_type', 'amenity_count', 'value_score']
+        ].to_dict('records')
+        if isinstance(records, list):
+            return [r for r in records if isinstance(r, dict)]
+        return []
 
     def compare_locations(self, city1: str, city2: str) -> Dict[str, Any]:
         """

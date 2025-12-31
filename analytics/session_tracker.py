@@ -6,7 +6,7 @@ the user experience and understand usage patterns.
 """
 
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 from pydantic import BaseModel, Field
 from enum import Enum
 import json
@@ -62,7 +62,7 @@ class SessionTracker:
         self,
         session_id: str,
         storage_path: str = ".analytics"
-    ):
+    ) -> None:
         """
         Initialize session tracker.
 
@@ -85,7 +85,7 @@ class SessionTracker:
         event_type: EventType,
         data: Optional[Dict[str, Any]] = None,
         duration_ms: Optional[int] = None
-    ):
+    ) -> None:
         """
         Track a user event.
 
@@ -111,7 +111,7 @@ class SessionTracker:
         intent: Optional[str] = None,
         complexity: Optional[str] = None,
         processing_time_ms: Optional[int] = None
-    ):
+    ) -> None:
         """Track a user query."""
         self.track_event(
             EventType.QUERY,
@@ -128,7 +128,7 @@ class SessionTracker:
         property_id: str,
         property_city: Optional[str] = None,
         property_price: Optional[float] = None
-    ):
+    ) -> None:
         """Track a property view."""
         self.track_event(
             EventType.PROPERTY_VIEW,
@@ -143,7 +143,7 @@ class SessionTracker:
         self,
         search_criteria: Dict[str, Any],
         results_count: int
-    ):
+    ) -> None:
         """Track a search operation."""
         self.track_event(
             EventType.SEARCH,
@@ -157,7 +157,7 @@ class SessionTracker:
         self,
         format: str,
         property_count: int
-    ):
+    ) -> None:
         """Track an export operation."""
         self.track_event(
             EventType.EXPORT,
@@ -171,7 +171,7 @@ class SessionTracker:
         self,
         property_id: str,
         action: str  # "add" or "remove"
-    ):
+    ) -> None:
         """Track a favorite operation."""
         self.track_event(
             EventType.FAVORITE,
@@ -185,7 +185,7 @@ class SessionTracker:
         self,
         old_model: Optional[str],
         new_model: str
-    ):
+    ) -> None:
         """Track a model change."""
         self.track_event(
             EventType.MODEL_CHANGE,
@@ -199,7 +199,7 @@ class SessionTracker:
         self,
         tool_name: str,
         parameters: Optional[Dict[str, Any]] = None
-    ):
+    ) -> None:
         """Track tool usage."""
         self.track_event(
             EventType.TOOL_USE,
@@ -213,7 +213,7 @@ class SessionTracker:
         self,
         error_type: str,
         error_message: str
-    ):
+    ) -> None:
         """Track an error."""
         self.track_event(
             EventType.ERROR,
@@ -240,11 +240,19 @@ class SessionTracker:
         error_events = [e for e in self.events if e.event_type == EventType.ERROR]
 
         # Unique models used
-        models = [e.data.get('new_model') for e in model_change_events if e.data.get('new_model')]
+        models: List[str] = []
+        for e in model_change_events:
+            new_model = e.data.get("new_model")
+            if isinstance(new_model, str) and new_model:
+                models.append(new_model)
         unique_models = list(set(models))
 
         # Tools used
-        tools = [e.data.get('tool_name') for e in tool_events if e.data.get('tool_name')]
+        tools: List[str] = []
+        for e in tool_events:
+            tool_name = e.data.get("tool_name")
+            if isinstance(tool_name, str) and tool_name:
+                tools.append(tool_name)
 
         # Calculate duration
         session_end = self.events[-1].timestamp if self.events else datetime.now()
@@ -298,14 +306,15 @@ class SessionTracker:
         Returns:
             Average duration in milliseconds or None
         """
-        events = [e for e in self.events if e.event_type == event_type and e.duration_ms is not None]
-
-        if not events:
+        durations: List[int] = [
+            e.duration_ms for e in self.events if e.event_type == event_type and e.duration_ms is not None
+        ]
+        if not durations:
             return None
 
-        return sum(e.duration_ms for e in events) / len(events)
+        return sum(durations) / len(durations)
 
-    def _save_session(self):
+    def _save_session(self) -> None:
         """Save session data to disk."""
         session_data = {
             'session_id': self.session_id,
@@ -328,12 +337,13 @@ class SessionTracker:
         # Update aggregate stats
         self._update_aggregate_stats()
 
-    def _update_aggregate_stats(self):
+    def _update_aggregate_stats(self) -> None:
         """Update aggregate statistics across all sessions."""
         # Load existing aggregate stats
         if self.aggregate_file.exists():
             with open(self.aggregate_file, 'r') as f:
-                aggregate = json.load(f)
+                loaded = json.load(f)
+                aggregate = loaded if isinstance(loaded, dict) else {}
         else:
             aggregate = {
                 'total_sessions': 0,
@@ -367,7 +377,7 @@ class SessionTracker:
         with open(self.aggregate_file, 'w') as f:
             json.dump(aggregate, f, indent=2, default=str)
 
-    def finalize_session(self):
+    def finalize_session(self) -> None:
         """Finalize and save the session."""
         self._save_session()
 
@@ -392,4 +402,7 @@ class SessionTracker:
             }
 
         with open(aggregate_file, 'r') as f:
-            return json.load(f)
+            loaded = json.load(f)
+            if isinstance(loaded, dict):
+                return loaded
+            return {}

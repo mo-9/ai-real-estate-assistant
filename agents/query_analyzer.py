@@ -9,7 +9,7 @@ This module analyzes user queries to determine:
 """
 
 from enum import Enum
-from typing import List, Optional, Set
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 import re
 
@@ -52,7 +52,7 @@ class QueryAnalysis(BaseModel):
     requires_comparison: bool = False
     requires_external_data: bool = False
     tools_needed: List[Tool] = Field(default_factory=list)
-    extracted_filters: dict = Field(default_factory=dict)
+    extracted_filters: Dict[str, Any] = Field(default_factory=dict)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     reasoning: Optional[str] = None
 
@@ -194,9 +194,9 @@ class QueryAnalyzer:
         # Default to general question
         return QueryIntent.GENERAL_QUESTION
 
-    def _extract_filters(self, query: str) -> dict:
+    def _extract_filters(self, query: str) -> Dict[str, Any]:
         """Extract structured filters from query."""
-        filters = {}
+        filters: Dict[str, Any] = {}
 
         # Extract price
         prices = self.PRICE_PATTERN.findall(query)
@@ -236,7 +236,7 @@ class QueryAnalyzer:
         self,
         query_lower: str,
         intent: QueryIntent,
-        filters: dict
+        filters: Dict[str, Any]
     ) -> Complexity:
         """Determine query complexity level."""
 

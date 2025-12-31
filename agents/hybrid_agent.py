@@ -273,11 +273,11 @@ Context from property database will be provided when relevant."""),
                 "intent": analysis.intent.value
             }
 
-        except Exception as e:
+        except Exception:
             # Fallback to RAG-only
             return self._process_with_rag(query, analysis)
 
-    def clear_memory(self):
+    def clear_memory(self) -> None:
         """Clear conversation memory."""
         self.memory.clear()
 
@@ -299,7 +299,7 @@ class SimpleRAGAgent:
         retriever: BaseRetriever,
         memory: Optional[ConversationBufferMemory] = None,
         verbose: bool = False
-    ):
+    ) -> None:
         """Initialize simple RAG agent."""
         self.llm = llm
         self.retriever = retriever
@@ -337,7 +337,7 @@ class SimpleRAGAgent:
                 "error": str(e)
             }
 
-    def clear_memory(self):
+    def clear_memory(self) -> None:
         """Clear conversation memory."""
         self.memory.clear()
 

@@ -1,5 +1,5 @@
 import os
-from typing import Sequence
+from typing import Dict, List, Sequence
 
 import pandas as pd
 from langchain.agents.agent_types import AgentType
@@ -16,7 +16,7 @@ class RealEstateGPT:
     property recommendations and insights.
     """
 
-    def __init__(self, df: pd.DataFrame | Sequence[pd.DataFrame], key: str):
+    def __init__(self, df: pd.DataFrame | Sequence[pd.DataFrame], key: str) -> None:
         """
         Initialize the RealEstateGPT agent.
         
@@ -52,9 +52,9 @@ class RealEstateGPT:
             allow_dangerous_code=False,
             prefix=self.system_msg
         )
-        self.conversation_history = []
+        self.conversation_history: List[Dict[str, str]] = []
 
-    def ask_qn(self, query):
+    def ask_qn(self, query: str) -> str:
         """
         Process a user query and generate a response using the LangChain agent.
         
@@ -82,7 +82,7 @@ class RealEstateGPT:
         dynamic_prompt = f'{self.system_msg}\n\n{formatted_history}\n\n{self.user_msg.format(query=query)}\n\n{self.assistant_msg}'
 
         try:
-            answer = self.agent.run(dynamic_prompt)
+            answer = str(self.agent.run(dynamic_prompt))
             history_item = {'User': query, 'Assistant': answer}
             self.conversation_history.append(history_item)
             return answer
@@ -91,7 +91,7 @@ class RealEstateGPT:
             err_msg = f"GPT Error: {ex} for question: {query}"
             return err_msg
 
-    def _format_history(self):
+    def _format_history(self) -> str:
         """
         Format the conversation history into a string for context in the prompt.
         

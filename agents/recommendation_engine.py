@@ -9,11 +9,9 @@ This module provides intelligent recommendations based on:
 """
 
 from typing import List, Dict, Any, Optional, Tuple
-from collections import defaultdict
-import math
 from langchain_core.documents import Document
 
-from data.schemas import Property, UserPreferences
+from data.schemas import UserPreferences
 
 
 class PropertyRecommendationEngine:
@@ -27,7 +25,7 @@ class PropertyRecommendationEngine:
     4. Popularity signals
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize recommendation engine."""
         self.weight_explicit = 0.4
         self.weight_value = 0.3
@@ -90,8 +88,8 @@ class PropertyRecommendationEngine:
         Returns:
             (score, explanation dict)
         """
-        metadata = doc.metadata
-        explanation = {}
+        metadata: Dict[str, Any] = dict(doc.metadata)
+        explanation: Dict[str, Any] = {}
 
         # 1. Explicit preference score
         explicit_score = 0.0
@@ -126,12 +124,11 @@ class PropertyRecommendationEngine:
         )
 
         # Add quality boost
-        has_quality_amenities = sum([
-            metadata.get('has_parking', False),
-            metadata.get('has_garden', False),
-            metadata.get('has_elevator', False),
-            metadata.get('has_balcony', False),
-        ])
+        has_quality_amenities = sum(
+            1
+            for key in ["has_parking", "has_garden", "has_elevator", "has_balcony"]
+            if bool(metadata.get(key, False))
+        )
         if has_quality_amenities >= 3:
             final_score *= 1.1
             explanation['premium_amenities'] = True
@@ -149,7 +146,7 @@ class PropertyRecommendationEngine:
 
     def _calculate_explicit_score(
         self,
-        metadata: dict,
+        metadata: Dict[str, Any],
         preferences: UserPreferences
     ) -> float:
         """Score based on explicit user preferences."""
@@ -158,7 +155,10 @@ class PropertyRecommendationEngine:
 
         # Budget match
         min_budget, max_budget = preferences.budget_range
-        property_price = metadata.get('price', 0)
+        property_price_raw = metadata.get("price", 0)
+        property_price = (
+            float(property_price_raw) if isinstance(property_price_raw, (int, float)) else 0.0
+        )
 
         if min_budget <= property_price <= max_budget:
             score += 1.0
@@ -172,13 +172,15 @@ class PropertyRecommendationEngine:
         # City match
         if preferences.preferred_cities:
             checks += 1
-            if metadata.get('city', '') in preferences.preferred_cities:
+            city = metadata.get("city")
+            if isinstance(city, str) and city in preferences.preferred_cities:
                 score += 1.0
 
         # Rooms match
         if preferences.preferred_rooms:
             checks += 1
-            if metadata.get('rooms') in preferences.preferred_rooms:
+            rooms = metadata.get("rooms")
+            if isinstance(rooms, int) and rooms in preferences.preferred_rooms:
                 score += 1.0
 
         # Must-have amenities
@@ -191,13 +193,14 @@ class PropertyRecommendationEngine:
         # Neighborhood match
         if preferences.preferred_neighborhoods:
             checks += 1
-            if metadata.get('neighborhood', '') in preferences.preferred_neighborhoods:
+            neighborhood = metadata.get("neighborhood")
+            if isinstance(neighborhood, str) and neighborhood in preferences.preferred_neighborhoods:
                 score += 1.0
 
         # Normalize
         return score / checks if checks > 0 else 0.5
 
-    def _calculate_value_score(self, metadata: dict) -> float:
+    def _calculate_value_score(self, metadata: Dict[str, Any]) -> float:
         """
         Score based on value for money.
 
@@ -209,8 +212,9 @@ class PropertyRecommendationEngine:
         score = 0.5  # Neutral start
 
         # Price per sqm analysis
-        if 'price_per_sqm' in metadata:
-            price_per_sqm = metadata['price_per_sqm']
+        price_per_sqm_raw = metadata.get("price_per_sqm")
+        if isinstance(price_per_sqm_raw, (int, float)):
+            price_per_sqm = float(price_per_sqm_raw)
 
             # Excellent value: under $20/sqm
             if price_per_sqm < 20:
@@ -226,25 +230,29 @@ class PropertyRecommendationEngine:
                 score -= 0.1
 
         # Amenity value
-        amenity_count = sum([
-            metadata.get('has_parking', False),
-            metadata.get('has_garden', False),
-            metadata.get('has_pool', False),
-            metadata.get('has_garage', False),
-            metadata.get('has_bike_room', False),
-            metadata.get('has_elevator', False),
-            metadata.get('has_balcony', False),
-        ])
+        amenity_count = sum(
+            1
+            for key in [
+                "has_parking",
+                "has_garden",
+                "has_pool",
+                "has_garage",
+                "has_bike_room",
+                "has_elevator",
+                "has_balcony",
+            ]
+            if bool(metadata.get(key, False))
+        )
 
         # Normalize amenities (0-7 range to 0-0.3)
         score += (amenity_count / 7) * 0.3
 
         # Cap score at 1.0
-        return min(score, 1.0)
+        return float(min(score, 1.0))
 
     def _calculate_implicit_score(
         self,
-        metadata: dict,
+        metadata: Dict[str, Any],
         viewed_properties: Optional[List[str]],
         favorited_properties: Optional[List[str]]
     ) -> float:
@@ -270,7 +278,7 @@ class PropertyRecommendationEngine:
         explicit_score: float,
         value_score: float,
         implicit_score: float,
-        metadata: dict
+        metadata: Dict[str, Any]
     ) -> str:
         """Generate human-readable recommendation reason."""
         reasons = []

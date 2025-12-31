@@ -15,6 +15,13 @@ from datetime import datetime
 from enum import Enum
 import json
 from pathlib import Path
+import threading
+
+from notifications.alert_manager import AlertManager
+from notifications.email_service import EmailService
+from notifications.notification_history import NotificationHistory, NotificationType, NotificationStatus
+from utils.property_cache import load_collection, load_previous_collection
+from utils.saved_searches import SavedSearchManager
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +175,10 @@ class NotificationPreferences:
         if not self.enabled:
             return False
 
-        # Check if this alert type is enabled
-        if not self.is_alert_enabled(alert_type):
+        if alert_type != AlertType.DIGEST and not self.is_alert_enabled(alert_type):
+            return False
+
+        if alert_type == AlertType.DIGEST and self.alert_frequency not in {AlertFrequency.DAILY, AlertFrequency.WEEKLY}:
             return False
 
         # Respect quiet hours only for non-instant delivery modes
@@ -448,3 +457,211 @@ def create_default_preferences(user_email: str) -> NotificationPreferences:
         max_alerts_per_day=10,
         enabled=True
     )
+
+
+class DigestScheduler:
+    def __init__(
+        self,
+        email_service: EmailService,
+        prefs_manager: Optional[NotificationPreferencesManager] = None,
+        history: Optional[NotificationHistory] = None,
+        search_manager: Optional[SavedSearchManager] = None,
+        poll_interval_seconds: int = 30,
+        storage_path_alerts: str = ".alerts",
+    ):
+        self._email_service = email_service
+        self._prefs_manager = prefs_manager or NotificationPreferencesManager()
+        self._history = history or NotificationHistory()
+        self._search_manager = search_manager or SavedSearchManager()
+        self._poll_interval_seconds = poll_interval_seconds
+        self._storage_path_alerts = storage_path_alerts
+
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._last_attempt_minute: Dict[tuple[str, NotificationType], str] = {}
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._run_loop, daemon=True, name="DigestScheduler")
+        self._thread.start()
+
+    def stop(self, timeout_seconds: float = 2.0) -> None:
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=timeout_seconds)
+
+    def run_pending(self, now: Optional[datetime] = None) -> Dict[str, Any]:
+        check_time = now or datetime.now()
+        sent = {"daily": 0, "weekly": 0}
+        errors: List[str] = []
+
+        try:
+            self._refresh_data_sources()
+            sent["daily"] += self._send_due(AlertFrequency.DAILY, check_time)
+            sent["weekly"] += self._send_due(AlertFrequency.WEEKLY, check_time)
+        except Exception as e:
+            errors.append(str(e))
+
+        return {"sent": sent, "errors": errors}
+
+    def _refresh_data_sources(self) -> None:
+        try:
+            self._prefs_manager._load_all_preferences()
+        except Exception:
+            pass
+
+        try:
+            self._search_manager.saved_searches = self._search_manager._load_searches()
+        except Exception:
+            pass
+
+    def _run_loop(self) -> None:
+        while not self._stop_event.is_set():
+            self.run_pending()
+            self._stop_event.wait(self._poll_interval_seconds)
+
+    def _send_due(self, frequency: AlertFrequency, now: datetime) -> int:
+        sent_count = 0
+        am = AlertManager(email_service=self._email_service, storage_path=self._storage_path_alerts)
+        users = self._prefs_manager.get_users_by_frequency(frequency)
+        for prefs in users:
+            record_id: Optional[str] = None
+            try:
+                if not self._is_time_match(prefs, now, frequency):
+                    continue
+                if not prefs.should_send_alert(AlertType.DIGEST, alerts_sent_today=0, check_time=now):
+                    continue
+
+                notification_type = (
+                    NotificationType.DIGEST_DAILY if frequency == AlertFrequency.DAILY else NotificationType.DIGEST_WEEKLY
+                )
+                attempt_key = (prefs.user_email, notification_type)
+                minute_key = now.strftime("%Y-%m-%d %H:%M")
+                if self._last_attempt_minute.get(attempt_key) == minute_key:
+                    continue
+                self._last_attempt_minute[attempt_key] = minute_key
+
+                if self._was_notification_sent_today(prefs.user_email, notification_type, now):
+                    continue
+
+                data = self._build_digest_data(prefs, now)
+
+                digest_type = "daily" if frequency == AlertFrequency.DAILY else "weekly"
+                alert_key = f"digest_{digest_type}_{now.strftime('%Y-%m-%d')}_{prefs.user_email}"
+                if alert_key in am._sent_alerts:
+                    continue
+
+                record = self._history.record_notification(
+                    user_email=prefs.user_email,
+                    notification_type=notification_type,
+                    subject=f"{digest_type.title()} Digest",
+                    metadata={"digest_type": digest_type},
+                )
+                record_id = record.id
+
+                ok = am.send_digest(prefs.user_email, digest_type=digest_type, data=data, send_email=True)
+                if ok:
+                    self._history.mark_sent(record.id)
+                    sent_count += 1
+                else:
+                    self._history.mark_failed(record.id, "Digest send returned False", add_to_retry_queue=True)
+            except Exception as e:
+                if record_id:
+                    try:
+                        self._history.mark_failed(record_id, str(e), add_to_retry_queue=True)
+                    except Exception:
+                        pass
+                logger.warning("Digest send failed for %s: %s", getattr(prefs, "user_email", "unknown"), e)
+        return sent_count
+
+    def _is_time_match(self, prefs: NotificationPreferences, now: datetime, frequency: AlertFrequency) -> bool:
+        try:
+            target_time = datetime.strptime(prefs.daily_digest_time, "%H:%M").time()
+        except Exception:
+            return False
+
+        if now.time().strftime("%H:%M") != target_time.strftime("%H:%M"):
+            return False
+
+        if frequency == AlertFrequency.WEEKLY:
+            current_day = now.strftime("%A").lower()
+            return current_day == prefs.weekly_digest_day.value
+
+        return True
+
+    def _was_notification_sent_today(
+        self, user_email: str, notification_type: NotificationType, now: datetime
+    ) -> bool:
+        records = self._history.get_user_notifications(user_email, notification_type=notification_type)
+        sent_statuses = {
+            NotificationStatus.SENT,
+            NotificationStatus.DELIVERED,
+            NotificationStatus.OPENED,
+            NotificationStatus.CLICKED,
+        }
+        for r in records:
+            if r.created_at.date() == now.date() and r.status in sent_statuses:
+                return True
+        return False
+
+    def _build_digest_data(self, prefs: NotificationPreferences, now: datetime) -> Dict[str, Any]:
+        current = load_collection()
+        previous = load_previous_collection()
+        if current is None:
+            return {
+                "new_properties": 0,
+                "price_drops": 0,
+                "avg_price": 0,
+                "total_properties": 0,
+                "average_price": 0,
+                "trending_cities": [],
+                "saved_searches": [],
+            }
+
+        total_properties = current.total_count or len(current.properties)
+        prices = [p.price for p in current.properties if p.price is not None]
+        avg_price = sum(prices) / len(prices) if prices else 0
+
+        city_counts: Dict[str, int] = {}
+        for p in current.properties:
+            city = (p.city or "").strip()
+            if not city:
+                continue
+            city_counts[city] = city_counts.get(city, 0) + 1
+        trending_cities = [c for c, _ in sorted(city_counts.items(), key=lambda kv: kv[1], reverse=True)[:5]]
+
+        am = AlertManager(email_service=self._email_service, storage_path=self._storage_path_alerts)
+
+        new_props = []
+        if previous is not None:
+            prev_keys = {am._get_property_key(p) for p in previous.properties}
+            for p in current.properties:
+                if am._get_property_key(p) not in prev_keys:
+                    new_props.append(p)
+
+        price_drops = 0
+        if previous is not None:
+            drops = am.check_price_drops(current, previous, threshold_percent=prefs.price_drop_threshold)
+            price_drops = len(drops)
+
+        saved_search_summaries: List[Dict[str, Any]] = []
+        searches = self._search_manager.get_all_searches()
+        for s in searches:
+            new_matches = 0
+            for p in new_props:
+                if s.matches(p.model_dump()):
+                    new_matches += 1
+            saved_search_summaries.append({"id": s.id, "name": s.name, "new_matches": new_matches})
+
+        return {
+            "new_properties": len(new_props),
+            "price_drops": price_drops,
+            "avg_price": avg_price,
+            "total_properties": total_properties,
+            "average_price": avg_price,
+            "trending_cities": trending_cities,
+            "saved_searches": saved_search_summaries,
+            "generated_at": now.isoformat(),
+        }

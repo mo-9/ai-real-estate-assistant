@@ -189,24 +189,42 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
         *,
         run_manager: Optional[CallbackManagerForRetrieverRun] = None,
     ) -> List[Document]:
-        """Retrieve and filter documents with advanced criteria."""
+        filters: Dict[str, Any] = self._extract_filters(query)
+        if self.forced_filters:
+            for forced_key, forced_val in self.forced_filters.items():
+                filters[forced_key] = forced_val
+        candidate_k = max(self.fetch_k, self.k)
 
-        # Get base results
-        results = super()._get_relevant_documents(query, run_manager=run_manager)
+        if self.search_type == "mmr":
+            retriever = self.vector_store.get_retriever(
+                search_type="mmr",
+                k=candidate_k,
+                fetch_k=max(self.fetch_k, candidate_k),
+                lambda_mult=self.lambda_mult,
+                filter=filters if filters else None,
+            )
+            results = retriever.get_relevant_documents(query)
+        else:
+            results_with_scores = self.vector_store.search(
+                query=query,
+                k=candidate_k,
+                filter=filters if filters else None,
+            )
+            results = [doc for doc, score in results_with_scores]
 
-        # Apply price filters
+        if filters:
+            results = self._apply_filters(results, filters)
+
         if self.min_price is not None or self.max_price is not None:
             results = self._filter_by_price(results)
 
-        # Apply geospatial radius filter
         if self.center_lat is not None and self.center_lon is not None and self.radius_km is not None:
             results = self._filter_by_geo(results)
 
-        # Sort results if requested
         if self.sort_by:
             results = self._sort_results(results)
 
-        return results
+        return results[:self.k]
 
     def _filter_by_price(self, documents: List[Document]) -> List[Document]:
         """Filter documents by price range."""
@@ -292,6 +310,7 @@ def create_retriever(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     sort_by: Optional[str] = None,
+    sort_ascending: bool = True,
     center_lat: Optional[float] = None,
     center_lon: Optional[float] = None,
     radius_km: Optional[float] = None,
@@ -308,6 +327,7 @@ def create_retriever(
         min_price: Minimum price filter
         max_price: Maximum price filter
         sort_by: Field to sort by
+        sort_ascending: Whether to sort ascending when sort_by is set
         **kwargs: Additional retriever parameters
 
     Returns:
@@ -325,6 +345,7 @@ def create_retriever(
             min_price=min_price,
             max_price=max_price,
             sort_by=sort_by,
+            sort_ascending=sort_ascending,
             center_lat=center_lat,
             center_lon=center_lon,
             radius_km=radius_km,

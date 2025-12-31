@@ -44,3 +44,41 @@ def test_retriever_sorting_handles_none_and_non_numeric(tmp_path):
     retr = AdvancedPropertyRetriever(vector_store=store, sort_by="price_per_sqm", sort_ascending=True)
     sorted_docs = retr._sort_results(docs)
     assert [d.page_content for d in sorted_docs[:2]] == ["d", "a"]
+
+
+def test_advanced_retriever_filters_and_slices_to_k(tmp_path, monkeypatch):
+    with patch.object(ChromaPropertyStore, "_create_embeddings", return_value=None):
+        store = ChromaPropertyStore(persist_directory=str(tmp_path))
+
+    docs = [
+        Document(page_content="low", metadata={"price": 1000}),
+        Document(page_content="mid", metadata={"price": 2000}),
+        Document(page_content="high", metadata={"price": 3000}),
+    ]
+
+    class FakeInnerRetriever:
+        def get_relevant_documents(self, query: str):
+            return docs
+
+    captured = {}
+
+    def fake_get_retriever(**kwargs):
+        captured.update(kwargs)
+        return FakeInnerRetriever()
+
+    monkeypatch.setattr(store, "get_retriever", fake_get_retriever)
+
+    retr = AdvancedPropertyRetriever(
+        vector_store=store,
+        k=1,
+        search_type="mmr",
+        min_price=1500,
+        sort_by="price",
+        sort_ascending=True,
+    )
+    results = retr.get_relevant_documents("apartments")
+
+    assert len(results) == 1
+    assert results[0].page_content == "mid"
+    assert captured["k"] == 20
+    assert captured["fetch_k"] == 20

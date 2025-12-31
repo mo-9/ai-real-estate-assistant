@@ -1155,25 +1155,70 @@ def render_market_insights_tab():
     with st.expander("🧠 Expert Panel", expanded=False):
         cities = list(stats.cities.keys())
         colA, colB = st.columns(2)
-        with colA:
-            st.caption("Geospatial Filter (radius)")
-            center_city = st.selectbox("Center City", options=cities or [""], index=0 if cities else 0)
-            radius_km = st.slider("Radius (km)", min_value=1, max_value=50, value=10)
-            m_center = st.session_state.get("geo_center_lat"), st.session_state.get("geo_center_lon")
-            if m_center[0] is None or m_center[1] is None:
-                lat, lon = _get_city_coordinates(center_city)
-            else:
-                lat, lon = float(m_center[0]), float(m_center[1])
-            import folium
-            fmap = folium.Map(location=[lat, lon], zoom_start=11)
-            folium.Circle(location=[lat, lon], radius=float(radius_km) * 1000.0, color="#4B5563", fill=True, fill_opacity=0.2).add_to(fmap)
-            folium.Marker(location=[lat, lon]).add_to(fmap)
-            r = st_folium(fmap, height=350, use_container_width=True)
-            click = r.get("last_clicked")
-            if click and "lat" in click and "lng" in click:
-                st.session_state.geo_center_lat = float(click["lat"])
-                st.session_state.geo_center_lon = float(click["lng"])
         with colB:
+            st.caption("Map Filters")
+            map_min_price = st.number_input(
+                "Min Price",
+                min_value=0.0,
+                value=0.0,
+                step=100.0,
+                key="map_min_price_input",
+            )
+            map_max_price = st.number_input(
+                "Max Price",
+                min_value=0.0,
+                value=0.0,
+                step=100.0,
+                key="map_max_price_input",
+            )
+            map_min_ppsqm = st.number_input(
+                "Min Price/sqm",
+                min_value=0.0,
+                value=0.0,
+                step=10.0,
+                key="map_min_ppsqm_input",
+            )
+            map_max_ppsqm = st.number_input(
+                "Max Price/sqm",
+                min_value=0.0,
+                value=0.0,
+                step=10.0,
+                key="map_max_ppsqm_input",
+            )
+            rooms_min, rooms_max = st.slider(
+                "Rooms",
+                min_value=0.0,
+                max_value=10.0,
+                value=(0.0, 10.0),
+                step=1.0,
+                key="map_rooms_range",
+            )
+
+            map_type_options = sorted([str(x) for x in insights.df["property_type"].dropna().unique().tolist()]) if len(insights.df) > 0 else []
+            map_property_types = st.multiselect(
+                "Property Type",
+                options=map_type_options,
+                default=map_type_options,
+                key="map_property_types",
+            )
+
+            c1, c2 = st.columns(2)
+            with c1:
+                must_parking = st.checkbox("Parking", value=False, key="map_must_parking")
+                must_elevator = st.checkbox("Elevator", value=False, key="map_must_elevator")
+            with c2:
+                must_balcony = st.checkbox("Balcony", value=False, key="map_must_balcony")
+                must_furnished = st.checkbox("Furnished", value=False, key="map_must_furnished")
+
+            map_max_points = st.slider(
+                "Max Points",
+                min_value=50,
+                max_value=2000,
+                value=500,
+                step=50,
+                key="map_max_points",
+            )
+
             st.caption("City Price Indices")
             selected_cities = st.multiselect("Cities", options=cities, default=cities[:3] if len(cities) >= 3 else cities)
             st.radio("Listing Type", options=["Any","Rent","Sale"], horizontal=True, key="listing_type_filter")
@@ -1209,19 +1254,161 @@ def render_market_insights_tab():
             st.session_state.retr_sort_by = sort_by_map.get(sort_label)
             st.session_state.retr_sort_ascending = sort_order == "Ascending"
 
-        if center_city:
-            lat, lon = _get_city_coordinates(center_city)
-            filtered_df = insights.filter_by_geo_radius(lat, lon, float(radius_km))
-            st.write(f"Filtered properties: {len(filtered_df)}")
-            st.session_state.geo_center_city = center_city
-            st.session_state.geo_center_lat = float(lat)
-            st.session_state.geo_center_lon = float(lon)
-            st.session_state.geo_radius_km = float(radius_km)
-            if len(filtered_df) > 0:
-                idx = MarketInsights(PropertyCollection(properties=[p for p in st.session_state.property_collection.properties if p.city == center_city or True]))
-                idx.df = filtered_df
-                city_idx = idx.get_city_price_indices()
-                st.dataframe(city_idx)
+        with colA:
+            st.caption("Map")
+            if not cities:
+                st.info(get_text('no_data', lang))
+            else:
+                center_city = st.selectbox("Center City", options=cities or [""], index=0 if cities else 0)
+                radius_km = st.slider("Radius (km)", min_value=1, max_value=50, value=10, key="map_radius_km")
+
+                m_center = st.session_state.get("geo_center_lat"), st.session_state.get("geo_center_lon")
+                if m_center[0] is None or m_center[1] is None:
+                    lat, lon = _get_city_coordinates(center_city)
+                else:
+                    lat, lon = float(m_center[0]), float(m_center[1])
+
+                pmin_map = float(map_min_price) if map_min_price and map_min_price > 0 else None
+                pmax_map = float(map_max_price) if map_max_price and map_max_price > 0 else None
+                if pmin_map is not None and pmax_map is not None and pmin_map > pmax_map:
+                    pmin_map, pmax_map = pmax_map, pmin_map
+
+                psmin_map = float(map_min_ppsqm) if map_min_ppsqm and map_min_ppsqm > 0 else None
+                psmax_map = float(map_max_ppsqm) if map_max_ppsqm and map_max_ppsqm > 0 else None
+                if psmin_map is not None and psmax_map is not None and psmin_map > psmax_map:
+                    psmin_map, psmax_map = psmax_map, psmin_map
+
+                lt_label = st.session_state.get("listing_type_filter")
+                listing_type = None
+                if lt_label == "Rent":
+                    listing_type = "rent"
+                elif lt_label == "Sale":
+                    listing_type = "sale"
+
+                has_coords = len(insights.df.dropna(subset=["lat", "lon"])) > 0 if len(insights.df) > 0 else False
+                if not has_coords:
+                    st.info("No coordinates found in the loaded dataset.")
+                    map_df = insights.df.iloc[0:0].copy()
+                else:
+                    map_df = insights.filter_properties(
+                        center_lat=float(lat),
+                        center_lon=float(lon),
+                        radius_km=float(radius_km),
+                        listing_type=listing_type,
+                        property_types=map_property_types,
+                        min_price=pmin_map,
+                        max_price=pmax_map,
+                        min_price_per_sqm=psmin_map,
+                        max_price_per_sqm=psmax_map,
+                        min_rooms=float(rooms_min) if rooms_min > 0 else None,
+                        max_rooms=float(rooms_max) if rooms_max < 10 else None,
+                        must_have_parking=bool(must_parking),
+                        must_have_elevator=bool(must_elevator),
+                        must_have_balcony=bool(must_balcony),
+                        must_be_furnished=bool(must_furnished),
+                        require_coords=True,
+                    )
+
+                st.write(f"Filtered properties: {len(map_df)}")
+                st.session_state.geo_center_city = center_city
+                st.session_state.geo_center_lat = float(lat)
+                st.session_state.geo_center_lon = float(lon)
+                st.session_state.geo_radius_km = float(radius_km)
+
+                import folium
+                from folium import plugins
+
+                fmap = folium.Map(location=[lat, lon], zoom_start=11)
+                folium.Circle(
+                    location=[lat, lon],
+                    radius=float(radius_km) * 1000.0,
+                    color="#4B5563",
+                    fill=True,
+                    fill_opacity=0.2,
+                ).add_to(fmap)
+                folium.Marker(location=[lat, lon]).add_to(fmap)
+
+                if has_coords and len(map_df) > 0:
+                    cluster = plugins.MarkerCluster(name="Properties").add_to(fmap)
+                    for _, row in map_df.head(int(map_max_points)).iterrows():
+                        try:
+                            plat = float(row["lat"])
+                            plon = float(row["lon"])
+                        except Exception:
+                            continue
+
+                        price_val = row.get("price")
+                        rooms_val = row.get("rooms")
+                        ppsqm_val = row.get("price_per_sqm")
+                        ptype_val = row.get("property_type")
+                        city_val = row.get("city")
+                        dist_val = None
+                        try:
+                            import math
+
+                            dist_val = None
+                            lat1 = math.radians(float(lat))
+                            lon1 = math.radians(float(lon))
+                            lat2 = math.radians(float(plat))
+                            lon2 = math.radians(float(plon))
+                            dlat = lat2 - lat1
+                            dlon = lon2 - lon1
+                            a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+                            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+                            dist_val = 6371.0 * c
+                        except Exception:
+                            dist_val = None
+
+                        tooltip = f"{city_val} | {ptype_val}"
+                        if price_val is not None:
+                            try:
+                                tooltip = f"{tooltip} | ${float(price_val):,.0f}"
+                            except Exception:
+                                tooltip = f"{tooltip} | {price_val}"
+                        popup_parts = []
+                        if city_val is not None:
+                            popup_parts.append(f"<b>{city_val}</b>")
+                        if ptype_val is not None:
+                            popup_parts.append(f"Type: {ptype_val}")
+                        if rooms_val is not None:
+                            try:
+                                popup_parts.append(f"Rooms: {float(rooms_val):.0f}")
+                            except Exception:
+                                popup_parts.append(f"Rooms: {rooms_val}")
+                        if price_val is not None:
+                            try:
+                                popup_parts.append(f"Price: ${float(price_val):,.0f}")
+                            except Exception:
+                                popup_parts.append(f"Price: {price_val}")
+                        if ppsqm_val is not None and str(ppsqm_val) != "nan":
+                            try:
+                                popup_parts.append(f"Price/sqm: ${float(ppsqm_val):,.0f}")
+                            except Exception:
+                                popup_parts.append(f"Price/sqm: {ppsqm_val}")
+                        if dist_val is not None:
+                            popup_parts.append(f"Distance: {dist_val:.2f} km")
+                        popup_html = "<br/>".join(popup_parts) if popup_parts else ""
+
+                        folium.CircleMarker(
+                            location=[plat, plon],
+                            radius=5,
+                            color="#2563EB",
+                            fill=True,
+                            fillColor="#2563EB",
+                            fillOpacity=0.65,
+                            weight=1,
+                            tooltip=tooltip,
+                            popup=folium.Popup(popup_html, max_width=320),
+                        ).add_to(cluster)
+
+                if has_coords and len(map_df) == 0:
+                    st.info("No properties match the current map filters.")
+
+                r = st_folium(fmap, height=350, use_container_width=True)
+                click = r.get("last_clicked")
+                if click and "lat" in click and "lng" in click:
+                    st.session_state.geo_center_lat = float(click["lat"])
+                    st.session_state.geo_center_lon = float(click["lng"])
 
         if selected_cities:
             indices_df = insights.get_city_price_indices(selected_cities)

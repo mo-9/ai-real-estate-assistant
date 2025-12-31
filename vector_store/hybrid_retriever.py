@@ -60,15 +60,17 @@ class HybridPropertyRetriever(BaseRetriever):
         if self.forced_filters:
             for forced_key, forced_val in self.forced_filters.items():
                 filters[forced_key] = forced_val
+        candidate_k = max(self.fetch_k, self.k)
 
         # Perform semantic search
         if self.search_type == "mmr":
             # Use MMR for diversity
             retriever = self.vector_store.get_retriever(
                 search_type="mmr",
-                k=self.k,
-                fetch_k=self.fetch_k,
+                k=candidate_k,
+                fetch_k=max(self.fetch_k, candidate_k),
                 lambda_mult=self.lambda_mult,
+                filter=filters if filters else None,
             )
             results = retriever.get_relevant_documents(query)
 
@@ -76,8 +78,8 @@ class HybridPropertyRetriever(BaseRetriever):
             # Use regular similarity search
             results_with_scores = self.vector_store.search(
                 query=query,
-                k=self.k,
-                filter=filters if filters else None
+                k=candidate_k,
+                filter=filters if filters else None,
             )
             results = [doc for doc, score in results_with_scores]
 
@@ -155,7 +157,7 @@ class HybridPropertyRetriever(BaseRetriever):
             # Check each filter
             match = True
             for key, value in filters.items():
-                if key in metadata and metadata[key] != value:
+                if metadata.get(key) != value:
                     match = False
                     break
 
@@ -211,7 +213,13 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
         filtered = []
 
         for doc in documents:
-            price = doc.metadata.get("price", 0)
+            raw_price = doc.metadata.get("price")
+            try:
+                price = float(raw_price) if raw_price is not None else None
+            except (TypeError, ValueError):
+                price = None
+            if price is None:
+                continue
 
             if self.min_price is not None and price < self.min_price:
                 continue
@@ -230,10 +238,21 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
             return documents
 
         try:
+            missing_value = float("inf") if self.sort_ascending else float("-inf")
+
+            def _key(doc: Document) -> float:
+                raw_val = doc.metadata.get(self.sort_by)
+                if raw_val is None:
+                    return missing_value
+                try:
+                    return float(raw_val)
+                except (TypeError, ValueError):
+                    return missing_value
+
             sorted_docs = sorted(
                 documents,
-                key=lambda doc: doc.metadata.get(self.sort_by, 0),
-                reverse=not self.sort_ascending
+                key=_key,
+                reverse=not self.sort_ascending,
             )
             return sorted_docs
 
@@ -250,8 +269,8 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
         lat1 = math.radians(self.center_lat)
         lon1 = math.radians(self.center_lon)
         for doc in documents:
-            lat = doc.metadata.get('lat')
-            lon = doc.metadata.get('lon')
+            lat = doc.metadata.get("lat") if "lat" in doc.metadata else doc.metadata.get("latitude")
+            lon = doc.metadata.get("lon") if "lon" in doc.metadata else doc.metadata.get("longitude")
             if lat is None or lon is None:
                 continue
             lat2 = math.radians(float(lat))

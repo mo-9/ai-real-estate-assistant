@@ -1,9 +1,12 @@
+from unittest.mock import patch
+
 from vector_store.hybrid_retriever import create_retriever, AdvancedPropertyRetriever
 from vector_store.chroma_store import ChromaPropertyStore
 
 
-def test_factory_returns_advanced_when_geo_params_present():
-    store = ChromaPropertyStore(persist_directory="chroma_db_test")
+def test_factory_returns_advanced_when_geo_params_present(tmp_path):
+    with patch.object(ChromaPropertyStore, "_create_embeddings", return_value=None):
+        store = ChromaPropertyStore(persist_directory=str(tmp_path))
     retriever = create_retriever(
         vector_store=store,
         k=5,
@@ -16,4 +19,3 @@ def test_factory_returns_advanced_when_geo_params_present():
     assert retriever.center_lat == 52.23
     assert retriever.center_lon == 21.01
     assert retriever.radius_km == 10.0
-

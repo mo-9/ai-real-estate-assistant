@@ -4,6 +4,8 @@ from langchain_core.documents import Document
 
 from ai.app_services import create_property_retriever
 from vector_store.chroma_store import ChromaPropertyStore
+from analytics.market_insights import MarketInsights
+from data.schemas import Property, PropertyCollection, PropertyType, ListingType
 
 
 def test_property_retriever_forced_listing_type_filters_results(tmp_path, monkeypatch):
@@ -154,3 +156,58 @@ def test_property_retriever_sorting_applies_after_retrieval(tmp_path, monkeypatc
 
     results = retriever.get_relevant_documents("apartments")
     assert [d.page_content for d in results] == ["b", "c", "a"]
+
+
+def test_market_insights_filter_properties_end_to_end():
+    properties = [
+        Property(
+            id="p1",
+            city="Warsaw",
+            price=1000,
+            area_sqm=50,
+            rooms=2,
+            property_type=PropertyType.APARTMENT,
+            listing_type=ListingType.RENT,
+            latitude=52.23,
+            longitude=21.01,
+            has_parking=True,
+        ),
+        Property(
+            id="p2",
+            city="Warsaw",
+            price=5000,
+            area_sqm=50,
+            rooms=4,
+            property_type=PropertyType.HOUSE,
+            listing_type=ListingType.SALE,
+            latitude=52.24,
+            longitude=21.02,
+            has_parking=False,
+            has_balcony=True,
+            is_furnished=True,
+        ),
+        Property(
+            id="p3",
+            city="Krakow",
+            price=1200,
+            area_sqm=60,
+            rooms=2,
+            property_type=PropertyType.APARTMENT,
+            listing_type=ListingType.RENT,
+            latitude=50.06,
+            longitude=19.94,
+        ),
+    ]
+    coll = PropertyCollection(properties=properties, total_count=len(properties))
+    insights = MarketInsights(coll)
+
+    df = insights.filter_properties(
+        center_lat=52.23,
+        center_lon=21.01,
+        radius_km=10.0,
+        listing_type="sale",
+        min_price_per_sqm=90.0,
+        must_have_balcony=True,
+        must_be_furnished=True,
+    )
+    assert df["id"].tolist() == ["p2"]

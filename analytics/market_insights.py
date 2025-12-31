@@ -110,13 +110,19 @@ class MarketInsights:
         data = []
         for prop in self.properties.properties:
             data.append({
+                'id': getattr(prop, 'id', None),
                 'country': getattr(prop, 'country', None),
                 'region': getattr(prop, 'region', None),
                 'city': prop.city,
+                'district': getattr(prop, 'district', None),
+                'neighborhood': getattr(prop, 'neighborhood', None),
                 'price': prop.price,
+                'currency': getattr(prop, 'currency', None),
+                'listing_type': prop.listing_type.value if hasattr(prop.listing_type, 'value') else str(prop.listing_type),
                 'rooms': prop.rooms,
                 'bathrooms': prop.bathrooms,
                 'area_sqm': prop.area_sqm,
+                'price_per_sqm': getattr(prop, 'price_per_sqm', None),
                 'property_type': prop.property_type.value if hasattr(prop.property_type, 'value') else str(prop.property_type),
                 'has_parking': prop.has_parking,
                 'has_garden': prop.has_garden,
@@ -126,7 +132,8 @@ class MarketInsights:
                 'has_elevator': prop.has_elevator,
                 'lat': getattr(prop, 'latitude', None),
                 'lon': getattr(prop, 'longitude', None),
-                'currency': getattr(prop, 'currency', None),
+                'year_built': getattr(prop, 'year_built', None),
+                'energy_cert': getattr(prop, 'energy_cert', None),
             })
         return pd.DataFrame(data)
 
@@ -332,6 +339,109 @@ class MarketInsights:
         earth_radius_km = 6371.0
         dist = earth_radius_km * c
         return df[dist <= radius_km]
+
+    def filter_properties(
+        self,
+        *,
+        center_lat: Optional[float] = None,
+        center_lon: Optional[float] = None,
+        radius_km: Optional[float] = None,
+        listing_type: Optional[str] = None,
+        property_types: Optional[List[str]] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        min_price_per_sqm: Optional[float] = None,
+        max_price_per_sqm: Optional[float] = None,
+        min_rooms: Optional[float] = None,
+        max_rooms: Optional[float] = None,
+        must_have_parking: bool = False,
+        must_have_elevator: bool = False,
+        must_have_balcony: bool = False,
+        must_be_furnished: bool = False,
+        year_built_min: Optional[int] = None,
+        year_built_max: Optional[int] = None,
+        energy_certs: Optional[List[str]] = None,
+        require_coords: bool = True,
+    ) -> pd.DataFrame:
+        df = self.df.copy()
+
+        if require_coords and len(df) > 0:
+            df = df.dropna(subset=['lat', 'lon'])
+
+        if (
+            center_lat is not None
+            and center_lon is not None
+            and radius_km is not None
+            and len(df) > 0
+        ):
+            df = self.filter_by_geo_radius(float(center_lat), float(center_lon), float(radius_km))
+
+        if len(df) == 0:
+            return df
+
+        if listing_type is not None:
+            lt = listing_type.strip().lower()
+            if lt and lt != "any" and "listing_type" in df.columns:
+                df = df[df["listing_type"].astype(str).str.lower() == lt]
+
+        if property_types:
+            allow = {str(x).strip().lower() for x in property_types if str(x).strip()}
+            if allow and "property_type" in df.columns:
+                df = df[df["property_type"].astype(str).str.lower().isin(allow)]
+
+        if "price" in df.columns:
+            df["price"] = pd.to_numeric(df["price"], errors="coerce")
+            if min_price is not None:
+                df = df[df["price"].notna() & (df["price"] >= float(min_price))]
+            if max_price is not None:
+                df = df[df["price"].notna() & (df["price"] <= float(max_price))]
+
+        if "rooms" in df.columns:
+            df["rooms"] = pd.to_numeric(df["rooms"], errors="coerce")
+            if min_rooms is not None:
+                df = df[df["rooms"].notna() & (df["rooms"] >= float(min_rooms))]
+            if max_rooms is not None:
+                df = df[df["rooms"].notna() & (df["rooms"] <= float(max_rooms))]
+
+        if "price_per_sqm" not in df.columns:
+            df["price_per_sqm"] = np.nan
+
+        if df["price_per_sqm"].isna().any() and "area_sqm" in df.columns and "price" in df.columns:
+            area = pd.to_numeric(df["area_sqm"], errors="coerce")
+            price = pd.to_numeric(df["price"], errors="coerce")
+            computed = price / area
+            computed = computed.replace([np.inf, -np.inf], np.nan)
+            df.loc[df["price_per_sqm"].isna(), "price_per_sqm"] = computed.loc[df["price_per_sqm"].isna()]
+
+        df["price_per_sqm"] = pd.to_numeric(df["price_per_sqm"], errors="coerce")
+        if min_price_per_sqm is not None:
+            df = df[df["price_per_sqm"].notna() & (df["price_per_sqm"] >= float(min_price_per_sqm))]
+        if max_price_per_sqm is not None:
+            df = df[df["price_per_sqm"].notna() & (df["price_per_sqm"] <= float(max_price_per_sqm))]
+
+        if must_have_parking and "has_parking" in df.columns:
+            df = df[df["has_parking"].fillna(False).astype(bool)]
+        if must_have_elevator and "has_elevator" in df.columns:
+            df = df[df["has_elevator"].fillna(False).astype(bool)]
+        if must_have_balcony and "has_balcony" in df.columns:
+            df = df[df["has_balcony"].fillna(False).astype(bool)]
+        if must_be_furnished and "is_furnished" in df.columns:
+            df = df[df["is_furnished"].fillna(False).astype(bool)]
+
+        if year_built_min is not None or year_built_max is not None:
+            if "year_built" in df.columns:
+                df["year_built"] = pd.to_numeric(df["year_built"], errors="coerce")
+                if year_built_min is not None:
+                    df = df[df["year_built"].notna() & (df["year_built"] >= int(year_built_min))]
+                if year_built_max is not None:
+                    df = df[df["year_built"].notna() & (df["year_built"] <= int(year_built_max))]
+
+        if energy_certs:
+            allow_energy = {str(x).strip().lower() for x in energy_certs if str(x).strip()}
+            if allow_energy and "energy_cert" in df.columns:
+                df = df[df["energy_cert"].astype(str).str.lower().isin(allow_energy)]
+
+        return df
 
     def get_monthly_price_index(
         self,

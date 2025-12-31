@@ -5,7 +5,7 @@ Tests for market insights and analytics module.
 import pytest
 import pandas as pd
 from analytics import MarketInsights, PriceTrend, MarketStatistics, TrendDirection
-from data.schemas import Property, PropertyCollection, PropertyType
+from data.schemas import Property, PropertyCollection, PropertyType, ListingType
 
 
 @pytest.fixture
@@ -118,6 +118,96 @@ class TestMarketInsights:
         insights = MarketInsights(sample_market_properties)
         assert insights is not None
         assert len(insights.df) == len(sample_market_properties.properties)
+
+    def test_filter_properties_applies_geo_and_map_filters(self):
+        properties = [
+            Property(
+                id="p1",
+                city="Warsaw",
+                rooms=2,
+                bathrooms=1,
+                price=1000,
+                area_sqm=50,
+                has_parking=True,
+                has_elevator=True,
+                has_balcony=False,
+                is_furnished=False,
+                property_type=PropertyType.APARTMENT,
+                listing_type=ListingType.RENT,
+                latitude=52.23,
+                longitude=21.01,
+            ),
+            Property(
+                id="p2",
+                city="Warsaw",
+                rooms=4,
+                bathrooms=2,
+                price=5000,
+                area_sqm=50,
+                has_parking=False,
+                has_elevator=False,
+                has_balcony=True,
+                is_furnished=True,
+                property_type=PropertyType.HOUSE,
+                listing_type=ListingType.SALE,
+                latitude=52.24,
+                longitude=21.02,
+            ),
+            Property(
+                id="p3",
+                city="Krakow",
+                rooms=2,
+                bathrooms=1,
+                price=1200,
+                area_sqm=60,
+                has_parking=False,
+                has_elevator=True,
+                has_balcony=False,
+                is_furnished=False,
+                property_type=PropertyType.APARTMENT,
+                listing_type=ListingType.RENT,
+                latitude=50.06,
+                longitude=19.94,
+            ),
+        ]
+        coll = PropertyCollection(properties=properties, total_count=len(properties))
+        insights = MarketInsights(coll)
+
+        radius_df = insights.filter_properties(center_lat=52.23, center_lon=21.01, radius_km=10.0)
+        assert set(radius_df["id"].tolist()) == {"p1", "p2"}
+
+        sale_df = insights.filter_properties(
+            center_lat=52.23,
+            center_lon=21.01,
+            radius_km=10.0,
+            listing_type="sale",
+        )
+        assert sale_df["id"].tolist() == ["p2"]
+
+        ppsqm_df = insights.filter_properties(
+            center_lat=52.23,
+            center_lon=21.01,
+            radius_km=10.0,
+            min_price_per_sqm=90.0,
+        )
+        assert ppsqm_df["id"].tolist() == ["p2"]
+
+        apt_df = insights.filter_properties(
+            center_lat=52.23,
+            center_lon=21.01,
+            radius_km=10.0,
+            property_types=["apartment"],
+        )
+        assert apt_df["id"].tolist() == ["p1"]
+
+        amenity_df = insights.filter_properties(
+            center_lat=52.23,
+            center_lon=21.01,
+            radius_km=10.0,
+            must_have_balcony=True,
+            must_be_furnished=True,
+        )
+        assert amenity_df["id"].tolist() == ["p2"]
 
     def test_dataframe_conversion(self, market_insights):
         """Test properties are correctly converted to DataFrame."""

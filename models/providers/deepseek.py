@@ -5,9 +5,10 @@ Supports DeepSeek-V3 and other DeepSeek models via OpenAI-compatible API.
 """
 
 import os
-from typing import List, Optional
+from typing import Any, List, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.language_models import BaseChatModel
+from pydantic import SecretStr
 
 from .base import (
     RemoteModelProvider,
@@ -28,7 +29,7 @@ class DeepSeekProvider(RemoteModelProvider):
     def display_name(self) -> str:
         return "DeepSeek"
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         super().__init__(config)
         # Get API key from config, environment, or None
         if "api_key" not in self.config:
@@ -104,7 +105,7 @@ class DeepSeekProvider(RemoteModelProvider):
         temperature: float = 0.0,
         max_tokens: Optional[int] = None,
         streaming: bool = True,
-        **kwargs
+        **kwargs: Any
     ) -> BaseChatModel:
         """Create DeepSeek model instance using OpenAI-compatible client."""
         # Validate model exists
@@ -124,16 +125,17 @@ class DeepSeekProvider(RemoteModelProvider):
                 "Set DEEPSEEK_API_KEY environment variable or provide in config."
             )
 
-        # Create model using OpenAI-compatible interface
-        return ChatOpenAI(
+        llm = ChatOpenAI(
             model=model_id,
             temperature=temperature,
-            max_tokens=max_tokens,
             streaming=streaming,
-            api_key=api_key,
+            api_key=SecretStr(api_key),
             base_url=self.config.get("base_url", "https://api.deepseek.com"),
             **kwargs
         )
+        if max_tokens is not None:
+            llm.max_tokens = max_tokens
+        return llm
 
     def validate_connection(self) -> tuple[bool, Optional[str]]:
         """Validate DeepSeek connection."""
@@ -143,7 +145,7 @@ class DeepSeekProvider(RemoteModelProvider):
 
         try:
             # Try to create a minimal model instance
-            model = self.create_model("deepseek-chat")
+            self.create_model("deepseek-chat")
             # If no error, connection is valid
             return True, None
         except Exception as e:

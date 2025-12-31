@@ -5,7 +5,7 @@ Supports local Llama, Mistral, Qwen, and other open-source models via Ollama.
 """
 
 import os
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from langchain_community.chat_models import ChatOllama
 from langchain_core.language_models import BaseChatModel
 
@@ -27,7 +27,7 @@ class OllamaProvider(LocalModelProvider):
     def display_name(self) -> str:
         return "Ollama (Local)"
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         # Default to local Ollama instance
         if "base_url" not in self.config:
@@ -185,7 +185,7 @@ class OllamaProvider(LocalModelProvider):
         temperature: float = 0.0,
         max_tokens: Optional[int] = None,
         streaming: bool = True,
-        **kwargs
+        **kwargs: Any
     ) -> BaseChatModel:
         """Create Ollama model instance."""
         # Note: Ollama doesn't require pre-validation of model availability
@@ -198,7 +198,6 @@ class OllamaProvider(LocalModelProvider):
             model=model_id,
             temperature=temperature,
             num_predict=max_tokens,
-            streaming=streaming,
             base_url=base_url,
             **kwargs
         )

@@ -5,9 +5,10 @@ Supports Claude 3.5 Sonnet, Claude 3 Opus, and other Anthropic models.
 """
 
 import os
-from typing import List, Optional
+from typing import Any, List, Optional
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
+from pydantic import SecretStr
 
 from .base import (
     RemoteModelProvider,
@@ -28,7 +29,7 @@ class AnthropicProvider(RemoteModelProvider):
     def display_name(self) -> str:
         return "Anthropic (Claude)"
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         super().__init__(config)
         # Get API key from config, environment, or None
         if "api_key" not in self.config:
@@ -124,7 +125,7 @@ class AnthropicProvider(RemoteModelProvider):
         temperature: float = 0.0,
         max_tokens: Optional[int] = None,
         streaming: bool = True,
-        **kwargs
+        **kwargs: Any
     ) -> BaseChatModel:
         """Create Anthropic model instance."""
         # Validate model exists
@@ -148,15 +149,15 @@ class AnthropicProvider(RemoteModelProvider):
         if max_tokens is None:
             max_tokens = 4096
 
-        # Create model
-        return ChatAnthropic(
-            model=model_id,
+        llm = ChatAnthropic(
             temperature=temperature,
-            max_tokens=max_tokens,
             streaming=streaming,
-            api_key=api_key,
+            api_key=SecretStr(api_key),
             **kwargs
         )
+        llm.model = model_id
+        llm.max_tokens = max_tokens
+        return llm
 
     def validate_connection(self) -> tuple[bool, Optional[str]]:
         """Validate Anthropic connection."""
@@ -166,7 +167,7 @@ class AnthropicProvider(RemoteModelProvider):
 
         try:
             # Try to create a minimal model instance
-            model = self.create_model("claude-3-5-haiku-20241022")
+            self.create_model("claude-3-5-haiku-20241022")
             return True, None
         except Exception as e:
             return False, f"Connection failed: {str(e)}"

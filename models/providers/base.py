@@ -6,7 +6,7 @@ LLM providers (OpenAI, Anthropic, Google, Ollama, etc.).
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Dict, Any, List
 from langchain_core.language_models import BaseChatModel
@@ -52,15 +52,12 @@ class ModelInfo:
     provider_name: str
     context_window: int
     pricing: Optional[PricingInfo] = None
-    capabilities: List[ModelCapability] = None
+    capabilities: List[ModelCapability] = field(default_factory=list)
     description: Optional[str] = None
-    recommended_for: List[str] = None
+    recommended_for: List[str] = field(default_factory=list)
 
-    def __post_init__(self):
-        if self.capabilities is None:
-            self.capabilities = []
-        if self.recommended_for is None:
-            self.recommended_for = []
+    def __post_init__(self) -> None:
+        return None
 
     def has_capability(self, capability: ModelCapability) -> bool:
         """Check if model has a specific capability."""
@@ -143,7 +140,7 @@ class ModelProvider(ABC):
         temperature: float = 0.0,
         max_tokens: Optional[int] = None,
         streaming: bool = True,
-        **kwargs
+        **kwargs: Any
     ) -> BaseChatModel:
         """
         Create a configured model instance.

@@ -6,7 +6,8 @@ and their models.
 """
 
 import logging
-from typing import Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
+from langchain_core.language_models import BaseChatModel
 from .providers.base import ModelProvider, ModelInfo
 from .providers.openai import OpenAIProvider
 from .providers.anthropic import AnthropicProvider
@@ -53,7 +54,7 @@ class ModelProviderFactory:
     def get_provider(
         cls,
         provider_name: str,
-        config: Optional[Dict] = None,
+        config: Optional[Dict[str, Any]] = None,
         use_cache: bool = True
     ) -> ModelProvider:
         """
@@ -156,8 +157,8 @@ class ModelProviderFactory:
         temperature: float = 0.0,
         max_tokens: Optional[int] = None,
         streaming: bool = True,
-        **kwargs
-    ):
+        **kwargs: Any
+    ) -> BaseChatModel:
         """
         Create a model instance by ID.
 
@@ -229,7 +230,7 @@ class ModelProviderFactory:
         cls,
         name: str,
         provider_class: Type[ModelProvider]
-    ):
+    ) -> None:
         """
         Register a custom provider.
 
@@ -245,14 +246,16 @@ class ModelProviderFactory:
         # Clear cache for this provider if it exists
         if name in cls._instances:
             del cls._instances[name]
+        return None
 
     @classmethod
-    def clear_cache(cls):
+    def clear_cache(cls) -> None:
         """Clear all cached provider instances."""
         cls._instances.clear()
+        return None
 
 
-def get_model_display_info(model_info: ModelInfo) -> Dict:
+def get_model_display_info(model_info: ModelInfo) -> Dict[str, Any]:
     """
     Get formatted display information for a model.
 

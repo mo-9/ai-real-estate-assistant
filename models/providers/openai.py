@@ -5,9 +5,10 @@ Supports GPT-4o, GPT-4o-mini, GPT-3.5-turbo and other OpenAI models.
 """
 
 import os
-from typing import List, Optional
+from typing import Any, List, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.language_models import BaseChatModel
+from pydantic import SecretStr
 
 from .base import (
     RemoteModelProvider,
@@ -28,7 +29,7 @@ class OpenAIProvider(RemoteModelProvider):
     def display_name(self) -> str:
         return "OpenAI"
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         super().__init__(config)
         # Get API key from config, environment, or None
         if "api_key" not in self.config:
@@ -205,7 +206,7 @@ class OpenAIProvider(RemoteModelProvider):
         temperature: float = 0.0,
         max_tokens: Optional[int] = None,
         streaming: bool = True,
-        **kwargs
+        **kwargs: Any
     ) -> BaseChatModel:
         """Create OpenAI model instance."""
         # Validate model exists
@@ -225,15 +226,16 @@ class OpenAIProvider(RemoteModelProvider):
                 "Set OPENAI_API_KEY environment variable or provide in config."
             )
 
-        # Create model
-        return ChatOpenAI(
+        llm = ChatOpenAI(
             model=model_id,
             temperature=temperature,
-            max_tokens=max_tokens,
             streaming=streaming,
-            api_key=api_key,
+            api_key=SecretStr(api_key),
             **kwargs
         )
+        if max_tokens is not None:
+            llm.max_tokens = max_tokens
+        return llm
 
     def validate_connection(self) -> tuple[bool, Optional[str]]:
         """Validate OpenAI connection."""
@@ -243,7 +245,7 @@ class OpenAIProvider(RemoteModelProvider):
 
         try:
             # Try to create a minimal model instance
-            model = self.create_model("gpt-3.5-turbo")
+            self.create_model("gpt-3.5-turbo")
             # If no error, connection is valid
             return True, None
         except Exception as e:

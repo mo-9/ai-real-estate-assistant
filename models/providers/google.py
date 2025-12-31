@@ -5,9 +5,10 @@ Supports Gemini 1.5 Pro, Gemini 1.5 Flash, and other Google models.
 """
 
 import os
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.language_models import BaseChatModel
+from pydantic import SecretStr
 
 from .base import (
     RemoteModelProvider,
@@ -28,7 +29,7 @@ class GoogleProvider(RemoteModelProvider):
     def display_name(self) -> str:
         return "Google (Gemini)"
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         # Get API key from config, environment, or None
         if "api_key" not in self.config:
@@ -105,7 +106,7 @@ class GoogleProvider(RemoteModelProvider):
         temperature: float = 0.0,
         max_tokens: Optional[int] = None,
         streaming: bool = True,
-        **kwargs
+        **kwargs: Any
     ) -> BaseChatModel:
         """Create Google model instance."""
         # Validate model exists
@@ -129,9 +130,8 @@ class GoogleProvider(RemoteModelProvider):
         return ChatGoogleGenerativeAI(
             model=model_id,
             temperature=temperature,
-            max_output_tokens=max_tokens,
-            streaming=streaming,
-            google_api_key=api_key,
+            max_tokens=max_tokens,
+            api_key=SecretStr(api_key),
             **kwargs
         )
 
@@ -143,7 +143,7 @@ class GoogleProvider(RemoteModelProvider):
 
         try:
             # Try to create a minimal model instance
-            model = self.create_model("gemini-1.5-flash")
+            self.create_model("gemini-1.5-flash")
             return True, None
         except Exception as e:
             return False, f"Connection failed: {str(e)}"

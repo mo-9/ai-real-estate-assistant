@@ -61,7 +61,7 @@ class AppSettings(BaseModel):
     initial_sidebar_state: str = "expanded"
 
     # Dataset URLs
-    default_datasets: list = Field(
+    default_datasets: list[str] = Field(
         default_factory=lambda: [
             "dataset/pl/apartments_rent_pl_2024_01.csv",
             "dataset/pl/apartments_rent_pl_2024_02.csv",
@@ -92,7 +92,7 @@ def get_settings() -> AppSettings:
     return settings
 
 
-def update_api_key(provider: str, api_key: str):
+def update_api_key(provider: str, api_key: str) -> None:
     """
     Update API key for a provider.
 
@@ -121,3 +121,4 @@ def update_api_key(provider: str, api_key: str):
     # Clear provider cache to pick up new API key
     from models.provider_factory import ModelProviderFactory
     ModelProviderFactory.clear_cache()
+    return None

@@ -798,6 +798,10 @@ def create_conversation_chain():
             center_lon=st.session_state.get("geo_center_lon"),
             radius_km=st.session_state.get("geo_radius_km"),
             listing_type_filter=st.session_state.get("listing_type_filter"),
+            min_price=st.session_state.get("retr_min_price"),
+            max_price=st.session_state.get("retr_max_price"),
+            sort_by=st.session_state.get("retr_sort_by"),
+            sort_ascending=st.session_state.get("retr_sort_ascending", True),
         )
 
         return svc_create_conversation_chain(
@@ -836,6 +840,10 @@ def create_hybrid_agent_instance():
             center_lon=st.session_state.get("geo_center_lon"),
             radius_km=st.session_state.get("geo_radius_km"),
             listing_type_filter=st.session_state.get("listing_type_filter"),
+            min_price=st.session_state.get("retr_min_price"),
+            max_price=st.session_state.get("retr_max_price"),
+            sort_by=st.session_state.get("retr_sort_by"),
+            sort_ascending=st.session_state.get("retr_sort_ascending", True),
         )
 
         return svc_create_hybrid_agent_instance(
@@ -1169,6 +1177,37 @@ def render_market_insights_tab():
             st.caption("City Price Indices")
             selected_cities = st.multiselect("Cities", options=cities, default=cities[:3] if len(cities) >= 3 else cities)
             st.radio("Listing Type", options=["Any","Rent","Sale"], horizontal=True, key="listing_type_filter")
+            st.caption("Chat Retrieval Filters")
+            min_price = st.number_input("Min Price", min_value=0.0, value=0.0, step=100.0, key="retr_min_price_input")
+            max_price = st.number_input("Max Price", min_value=0.0, value=0.0, step=100.0, key="retr_max_price_input")
+            sort_label = st.selectbox(
+                "Sort by",
+                options=["Relevance", "Price", "Price per sqm", "Rooms"],
+                index=0,
+                key="retr_sort_label",
+            )
+            sort_order = st.radio(
+                "Order",
+                options=["Ascending", "Descending"],
+                index=0,
+                horizontal=True,
+                key="retr_sort_order",
+            )
+
+            pmin = float(min_price) if min_price and min_price > 0 else None
+            pmax = float(max_price) if max_price and max_price > 0 else None
+            if pmin is not None and pmax is not None and pmin > pmax:
+                pmin, pmax = pmax, pmin
+            st.session_state.retr_min_price = pmin
+            st.session_state.retr_max_price = pmax
+            sort_by_map = {
+                "Relevance": None,
+                "Price": "price",
+                "Price per sqm": "price_per_sqm",
+                "Rooms": "rooms",
+            }
+            st.session_state.retr_sort_by = sort_by_map.get(sort_label)
+            st.session_state.retr_sort_ascending = sort_order == "Ascending"
 
         if center_city:
             lat, lon = _get_city_coordinates(center_city)

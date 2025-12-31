@@ -5,7 +5,6 @@ Tests mortgage calculator, property comparator, and other tools.
 """
 
 import pytest
-import math
 from tools.property_tools import (
     MortgageCalculatorTool,
     PropertyComparisonTool,

@@ -1,4 +1,3 @@
-from pathlib import Path
 import utils.ui_helpers as ui_helpers
 
 def test_load_css_file_reads_content(tmp_path):

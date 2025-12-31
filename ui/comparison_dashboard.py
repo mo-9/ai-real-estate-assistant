@@ -10,13 +10,12 @@ Provides comprehensive side-by-side property comparisons with:
 - Export functionality
 """
 
-from typing import List, Optional
+from typing import List
 import streamlit as st
 from data.schemas import Property
 from ui.comparison_viz import PropertyComparison
 from ui.radar_charts import create_property_radar_chart, create_amenity_radar_chart
 from ui.price_charts import create_price_comparison_chart
-from ui.metrics import display_metric_card
 
 
 def display_comparison_dashboard(
@@ -156,7 +155,6 @@ def display_comparison_dashboard(
         prop_scores = []
         for prop in properties:
             # Calculate value score for each
-            comp_temp = PropertyComparison([prop])
             # We need to get the score somehow - let's recalculate
             price_norm = (max(p.price for p in properties) - prop.price) / (max(p.price for p in properties) - min(p.price for p in properties)) if len(properties) > 1 else 0.5
             rooms_norm = (prop.rooms - min(p.rooms for p in properties)) / (max(p.rooms for p in properties) - min(p.rooms for p in properties)) if len(properties) > 1 and max(p.rooms for p in properties) != min(p.rooms for p in properties) else 0.5
@@ -249,8 +247,6 @@ def display_compact_comparison(properties: List[Property]):
     comparison = PropertyComparison(properties)
 
     # Price comparison
-    price_comp = comparison.get_price_comparison()
-
     cols = st.columns(len(properties))
 
     for prop, col in zip(properties, cols):
@@ -405,12 +401,12 @@ def _get_property_cons(prop: Property, all_properties: List[Property]) -> List[s
 
 def _export_comparison_markdown(properties: List[Property], comparison: PropertyComparison) -> str:
     """Export comparison as Markdown."""
-    md = f"# Property Comparison Report\n\n"
+    md = "# Property Comparison Report\n\n"
     md += f"Comparing {len(properties)} properties\n\n"
 
     # Price comparison
     price_comp = comparison.get_price_comparison()
-    md += f"## Price Overview\n\n"
+    md += "## Price Overview\n\n"
     md += f"- **Cheapest**: {price_comp['cheapest']['city']} - ${price_comp['cheapest']['price']:,.0f}\n"
     md += f"- **Most Expensive**: {price_comp['most_expensive']['city']} - ${price_comp['most_expensive']['price']:,.0f}\n"
     md += f"- **Average**: ${price_comp['avg_price']:,.0f}\n"
@@ -418,12 +414,12 @@ def _export_comparison_markdown(properties: List[Property], comparison: Property
 
     # Best value
     best_value = comparison.get_best_value()
-    md += f"## Best Value\n\n"
+    md += "## Best Value\n\n"
     md += f"**{best_value['city']}** (Score: {best_value['value_score']:.2f})\n\n"
     md += f"{best_value['reasoning']}\n\n"
 
     # Individual properties
-    md += f"## Property Details\n\n"
+    md += "## Property Details\n\n"
     for i, prop in enumerate(properties, 1):
         md += f"### {i}. {prop.city}\n\n"
         md += f"- **Price**: ${prop.price:,.0f}/month\n"
@@ -432,7 +428,7 @@ def _export_comparison_markdown(properties: List[Property], comparison: Property
         if prop.area_sqm:
             md += f"- **Area**: {prop.area_sqm} sqm (${prop.price/prop.area_sqm:.2f}/sqm)\n"
 
-        md += f"- **Amenities**: "
+        md += "- **Amenities**: "
         amenities = []
         if prop.has_parking:
             amenities.append("Parking")

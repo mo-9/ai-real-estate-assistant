@@ -1,5 +1,5 @@
 from ui.geo_viz import get_property_coords
-from data.schemas import Property, PropertyCollection
+from data.schemas import Property
 
 
 def test_get_property_coords_prefers_lat_lon():

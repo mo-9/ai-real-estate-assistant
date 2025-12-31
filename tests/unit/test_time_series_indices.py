@@ -54,5 +54,4 @@ def test_monthly_price_index_yoy_handles_missing_prev():
     insights = MarketInsights(coll)
     df = insights.get_monthly_price_index(city="Warsaw")
     # The YoY for the last month should be NaN due to missing previous value
-    import pandas as pd
     assert pd.isna(df['yoy_pct'].iloc[-1])

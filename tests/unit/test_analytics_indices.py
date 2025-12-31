@@ -1,4 +1,3 @@
-import pandas as pd
 from analytics.market_insights import MarketInsights
 from data.schemas import Property, PropertyCollection, PropertyType
 

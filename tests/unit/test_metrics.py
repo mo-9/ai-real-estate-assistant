@@ -4,7 +4,6 @@ Unit tests for metrics utility functions.
 Tests metric formatting and calculation functions in ui/metrics.py
 """
 
-import pytest
 from ui.metrics import format_number, format_delta
 
 

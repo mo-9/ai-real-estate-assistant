@@ -19,7 +19,7 @@ from ui.price_charts import (
     create_price_amenity_scatter,
     create_price_per_sqm_chart
 )
-from ui.metrics import display_metrics_row, display_stat_box, format_number
+from ui.metrics import display_metrics_row, display_stat_box
 
 
 def display_market_dashboard(
@@ -93,7 +93,7 @@ def display_market_dashboard(
             display_stat_box(
                 title="Avg Rooms",
                 value=f"{stats.avg_rooms:.1f}",
-                subtitle=f"rooms per property",
+                subtitle="rooms per property",
                 icon="🛏️",
                 color="#1f77b4"
             )
@@ -102,7 +102,7 @@ def display_market_dashboard(
             display_stat_box(
                 title="With Parking",
                 value=f"{stats.parking_percentage:.0f}%",
-                subtitle=f"properties have parking",
+                subtitle="properties have parking",
                 icon="🚗",
                 color="#2ca02c"
             )
@@ -111,7 +111,7 @@ def display_market_dashboard(
             display_stat_box(
                 title="With Garden",
                 value=f"{stats.garden_percentage:.0f}%",
-                subtitle=f"properties have gardens",
+                subtitle="properties have gardens",
                 icon="🌳",
                 color="#ff7f0e"
             )
@@ -120,7 +120,7 @@ def display_market_dashboard(
             display_stat_box(
                 title="Furnished",
                 value=f"{stats.furnished_percentage:.0f}%",
-                subtitle=f"properties are furnished",
+                subtitle="properties are furnished",
                 icon="🛋️",
                 color="#d62728"
             )

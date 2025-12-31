@@ -3,8 +3,6 @@ Pytest configuration and shared fixtures.
 """
 
 import pytest
-from pathlib import Path
-import pandas as pd
 from langchain_community.llms.fake import FakeListLLM
 from langchain_core.documents import Document
 

@@ -9,7 +9,7 @@ Provides various chart types for analyzing property prices:
 - Price per square meter analysis
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd

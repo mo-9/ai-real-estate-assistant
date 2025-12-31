@@ -10,7 +10,7 @@ Provides interactive maps using Folium with:
 - Location filtering
 """
 
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Optional, Tuple
 import folium
 from folium import plugins
 from data.schemas import Property, PropertyCollection

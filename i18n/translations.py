@@ -47,9 +47,6 @@ TRANSLATIONS: Dict[str, Dict[str, Any]] = {
         "data_loaded": "Data Loaded Successfully",
         "properties_loaded": "properties loaded",
         "phase2_features": "Phase 2 Features",
-        "use_hybrid_agent": "Use Hybrid Agent",
-        "show_query_analysis": "Show Query Analysis",
-        "use_reranking": "Use Result Reranking",
         "language": "Language",
         "theme": "Theme",
         "light_theme": "☀️ Light",
@@ -416,9 +413,6 @@ TRANSLATIONS: Dict[str, Dict[str, Any]] = {
         "data_loaded": "Dane Załadowane Pomyślnie",
         "properties_loaded": "nieruchomości załadowanych",
         "phase2_features": "Funkcje Fazy 2",
-        "use_hybrid_agent": "Użyj Agenta Hybrydowego",
-        "show_query_analysis": "Pokaż Analizę Zapytań",
-        "use_reranking": "Użyj Ponownego Rankingu",
         "language": "Język",
         "theme": "Motyw",
         "light_theme": "☀️ Jasny",
@@ -2333,7 +2327,13 @@ def get_text(key: str, lang: str = "en") -> str:
     if lang not in TRANSLATIONS:
         lang = "en"
 
-    return TRANSLATIONS[lang].get(key, TRANSLATIONS["en"].get(key, key))
+    value = TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key)
+    if isinstance(value, str):
+        return value
+    fallback = TRANSLATIONS["en"].get(key)
+    if isinstance(fallback, str):
+        return fallback
+    return key
 
 
 def get_language_name(lang_code: str) -> str:

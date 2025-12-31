@@ -7,7 +7,6 @@ and tool selection.
 
 import pytest
 from agents.query_analyzer import (
-    QueryAnalyzer,
     QueryIntent,
     Complexity,
     Tool,

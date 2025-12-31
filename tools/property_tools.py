@@ -6,7 +6,7 @@ and calculations.
 """
 
 import math
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from langchain.tools import BaseTool
 
@@ -114,7 +114,7 @@ Breakdown:
         except Exception as e:
             return f"Error calculating mortgage: {str(e)}"
 
-    async def _arun(self, *args, **kwargs) -> str:
+    async def _arun(self, *args: Any, **kwargs: Any) -> str:
         """Async version."""
         return self._run(*args, **kwargs)
 

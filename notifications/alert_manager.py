@@ -19,6 +19,7 @@ from pathlib import Path
 from data.schemas import Property, PropertyCollection
 from utils import SavedSearch
 from notifications.email_service import EmailService
+from notifications.email_templates import DigestTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -310,34 +311,12 @@ class AlertManager:
         Returns:
             True if sent successfully
         """
-        date_str = datetime.now().strftime("%B %d, %Y")
-        subject = f"📊 Your {digest_type.title()} Real Estate Digest - {date_str}"
+        date_key = datetime.now().strftime("%Y-%m-%d")
+        alert_key = f"digest_{digest_type}_{date_key}_{user_email}"
+        if alert_key in self._sent_alerts:
+            return False
 
-        message = f"""
-        <h2>📊 {digest_type.title()} Real Estate Digest</h2>
-        <p style="color: #666;">{date_str}</p>
-
-        <div style="display: flex; justify-content: space-around; margin: 20px 0;">
-            <div style="text-align: center;">
-                <h3 style="color: #1f77b4; margin: 5px 0;">{data.get('new_properties', 0)}</h3>
-                <p style="color: #666; margin: 0;">New Properties</p>
-            </div>
-            <div style="text-align: center;">
-                <h3 style="color: #2ca02c; margin: 5px 0;">{data.get('price_drops', 0)}</h3>
-                <p style="color: #666; margin: 0;">Price Drops</p>
-            </div>
-            <div style="text-align: center;">
-                <h3 style="color: #ff7f0e; margin: 5px 0;">${data.get('avg_price', 0):.0f}</h3>
-                <p style="color: #666; margin: 0;">Avg Price</p>
-            </div>
-        </div>
-
-        <h3>📈 Market Summary</h3>
-        <ul>
-            <li>Total Active Listings: {data.get('total_properties', 0)}</li>
-            <li>Average Price: ${data.get('average_price', 0):.0f}</li>
-        </ul>
-        """
+        subject, message = DigestTemplate.render(digest_type, data, user_name=user_email.split("@")[0])
 
         if send_email:
             try:
@@ -347,11 +326,13 @@ class AlertManager:
                     body=message,
                     html=True
                 )
+                self._mark_alert_sent(alert_key)
                 return True
             except Exception as e:
                 logger.warning("Failed to send digest: %s", e)
                 return False
         else:
+            self._mark_alert_sent(alert_key)
             return True
 
     def _get_property_key(self, prop: Property) -> str:

@@ -58,12 +58,20 @@ def test_create_property_retriever_passes_forced_filters(monkeypatch):
         center_lon=None,
         radius_km=None,
         listing_type_filter="Rent",
+        min_price=1000.0,
+        max_price=2000.0,
+        sort_by="price",
+        sort_ascending=False,
     )
 
     assert retriever is not None
     assert captured["k"] == 7
     assert captured["search_type"] == "mmr"
     assert captured["forced_filters"] == {"listing_type": "rent"}
+    assert captured["min_price"] == 1000.0
+    assert captured["max_price"] == 2000.0
+    assert captured["sort_by"] == "price"
+    assert captured["sort_ascending"] is False
 
 
 def test_create_conversation_chain_builds_memory(monkeypatch):

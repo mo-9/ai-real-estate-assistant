@@ -86,3 +86,71 @@ def test_property_retriever_geo_radius_filters_results(tmp_path, monkeypatch):
 
     results = retriever.get_relevant_documents("apartments")
     assert [d.page_content for d in results] == ["near"]
+
+
+def test_property_retriever_price_range_filters_results(tmp_path, monkeypatch):
+    with patch.object(ChromaPropertyStore, "_create_embeddings", return_value=None):
+        store = ChromaPropertyStore(persist_directory=str(tmp_path))
+
+    docs = [
+        Document(page_content="low", metadata={"price": 1000}),
+        Document(page_content="mid", metadata={"price": 1500}),
+        Document(page_content="high", metadata={"price": 2500}),
+    ]
+
+    class FakeInnerRetriever:
+        def get_relevant_documents(self, query: str):
+            return docs
+
+    def fake_get_retriever(**kwargs):
+        return FakeInnerRetriever()
+
+    monkeypatch.setattr(store, "get_retriever", fake_get_retriever)
+
+    retriever = create_property_retriever(
+        vector_store=store,
+        k_results=10,
+        center_lat=None,
+        center_lon=None,
+        radius_km=None,
+        listing_type_filter=None,
+        min_price=1200.0,
+        max_price=2000.0,
+    )
+
+    results = retriever.get_relevant_documents("apartments")
+    assert [d.page_content for d in results] == ["mid"]
+
+
+def test_property_retriever_sorting_applies_after_retrieval(tmp_path, monkeypatch):
+    with patch.object(ChromaPropertyStore, "_create_embeddings", return_value=None):
+        store = ChromaPropertyStore(persist_directory=str(tmp_path))
+
+    docs = [
+        Document(page_content="a", metadata={"price_per_sqm": 20}),
+        Document(page_content="b", metadata={"price_per_sqm": 5}),
+        Document(page_content="c", metadata={"price_per_sqm": 10}),
+    ]
+
+    class FakeInnerRetriever:
+        def get_relevant_documents(self, query: str):
+            return docs
+
+    def fake_get_retriever(**kwargs):
+        return FakeInnerRetriever()
+
+    monkeypatch.setattr(store, "get_retriever", fake_get_retriever)
+
+    retriever = create_property_retriever(
+        vector_store=store,
+        k_results=10,
+        center_lat=None,
+        center_lon=None,
+        radius_km=None,
+        listing_type_filter=None,
+        sort_by="price_per_sqm",
+        sort_ascending=True,
+    )
+
+    results = retriever.get_relevant_documents("apartments")
+    assert [d.page_content for d in results] == ["b", "c", "a"]

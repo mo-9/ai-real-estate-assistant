@@ -48,6 +48,10 @@ def create_property_retriever(
     center_lon: Optional[float],
     radius_km: Optional[float],
     listing_type_filter: Optional[str],
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    sort_by: Optional[str] = None,
+    sort_ascending: bool = True,
 ) -> BaseRetriever:
     return create_retriever(
         vector_store=vector_store,
@@ -56,6 +60,10 @@ def create_property_retriever(
         center_lat=center_lat,
         center_lon=center_lon,
         radius_km=radius_km,
+        min_price=min_price,
+        max_price=max_price,
+        sort_by=sort_by,
+        sort_ascending=sort_ascending,
         forced_filters=build_forced_filters(listing_type_filter),
     )
 

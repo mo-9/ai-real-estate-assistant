@@ -4,7 +4,6 @@ Unit tests for result reranker.
 Tests reranking logic, boosting factors, and diversity penalties.
 """
 
-import pytest
 from langchain_core.documents import Document
 
 from vector_store.reranker import PropertyReranker, SimpleReranker, create_reranker
@@ -40,12 +39,8 @@ class TestPropertyReranker:
         """Test that reranking changes result order."""
         query = "affordable apartment with parking"
 
-        # Initial order
-        initial_order = [doc.metadata['id'] for doc in sample_documents]
-
         # Reranked order
         reranked = reranker.rerank(query, sample_documents, k=5)
-        reranked_order = [doc.metadata['id'] for doc, score in reranked]
 
         # Orders should be different (unless by chance they're the same)
         # We'll check that scores vary

@@ -8,8 +8,8 @@ ensuring data quality and consistency across the application.
 import logging
 from datetime import datetime
 from enum import Enum
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, validator, field_validator
+from typing import Optional, List, Dict, Any, cast
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -138,7 +138,7 @@ class Property(BaseModel):
 
     @field_validator('rooms', 'bathrooms')
     @classmethod
-    def validate_positive(cls, v: float, info) -> float:
+    def validate_positive(cls, v: float, info: ValidationInfo) -> float:
         """Ensure rooms and bathrooms are positive."""
         if v < 0:
             raise ValueError(f"{info.field_name} must be positive")
@@ -162,10 +162,13 @@ class Property(BaseModel):
             self.price_per_sqm = round(base_price / self.area_sqm, 2)
 
         # Calculate total monthly cost
-        if self.price_media:
-            self.total_monthly_cost = round(self.price + self.price_media, 2)
+        if self.price is not None:
+            if self.price_media is not None:
+                self.total_monthly_cost = round(self.price + self.price_media, 2)
+            else:
+                self.total_monthly_cost = self.price
         else:
-            self.total_monthly_cost = self.price
+            self.total_monthly_cost = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert property to dictionary representation."""
@@ -346,16 +349,16 @@ class PropertyCollection(BaseModel):
             filtered = [p for p in filtered if p.city.lower() == city.lower()]
 
         if min_price is not None:
-            filtered = [p for p in filtered if p.price >= min_price]
+            filtered = [p for p in filtered if p.price is not None and p.price >= min_price]
 
         if max_price is not None:
-            filtered = [p for p in filtered if p.price <= max_price]
+            filtered = [p for p in filtered if p.price is not None and p.price <= max_price]
 
         if min_rooms is not None:
-            filtered = [p for p in filtered if p.rooms >= min_rooms]
+            filtered = [p for p in filtered if p.rooms is not None and p.rooms >= min_rooms]
 
         if max_rooms is not None:
-            filtered = [p for p in filtered if p.rooms <= max_rooms]
+            filtered = [p for p in filtered if p.rooms is not None and p.rooms <= max_rooms]
 
         if has_parking is not None:
             filtered = [p for p in filtered if p.has_parking == has_parking]
@@ -387,9 +390,9 @@ class SearchCriteria(BaseModel):
 
     @field_validator('max_price')
     @classmethod
-    def validate_price_range(cls, v: Optional[float], info) -> Optional[float]:
+    def validate_price_range(cls, v: Optional[float], info: ValidationInfo) -> Optional[float]:
         """Ensure max_price is greater than min_price if both are set."""
-        min_price = info.data.get('min_price')
+        min_price = cast(Optional[float], info.data.get('min_price'))
         if v is not None and min_price is not None and v < min_price:
             raise ValueError("max_price must be greater than min_price")
         return v

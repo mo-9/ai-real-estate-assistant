@@ -56,10 +56,10 @@ class HybridPropertyRetriever(BaseRetriever):
             List of relevant documents
         """
         # Extract metadata filters from query (simple keyword-based)
-        filters = self._extract_filters(query)
+        filters: Dict[str, Any] = self._extract_filters(query)
         if self.forced_filters:
-            for k, v in self.forced_filters.items():
-                filters[k] = v
+            for forced_key, forced_val in self.forced_filters.items():
+                filters[forced_key] = forced_val
 
         # Perform semantic search
         if self.search_type == "mmr":
@@ -100,7 +100,7 @@ class HybridPropertyRetriever(BaseRetriever):
         Returns:
             Dictionary of filters
         """
-        filters = {}
+        filters: Dict[str, Any] = {}
         query_lower = query.lower()
 
         # Extract city
@@ -242,10 +242,13 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
             return documents
 
     def _filter_by_geo(self, documents: List[Document]) -> List[Document]:
+        if self.center_lat is None or self.center_lon is None or self.radius_km is None:
+            return []
+
         filtered = []
         import math
-        lat1 = math.radians(float(self.center_lat))
-        lon1 = math.radians(float(self.center_lon))
+        lat1 = math.radians(self.center_lat)
+        lon1 = math.radians(self.center_lon)
         for doc in documents:
             lat = doc.metadata.get('lat')
             lon = doc.metadata.get('lon')
@@ -258,7 +261,7 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
             a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
             dist_km = 6371.0 * c
-            if dist_km <= float(self.radius_km):
+            if dist_km <= self.radius_km:
                 filtered.append(doc)
         return filtered
 
@@ -274,7 +277,7 @@ def create_retriever(
     center_lon: Optional[float] = None,
     radius_km: Optional[float] = None,
     forced_filters: Optional[Dict[str, Any]] = None,
-    **kwargs
+    **kwargs: Any
 ) -> BaseRetriever:
     """
     Factory function to create a retriever.

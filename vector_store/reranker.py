@@ -6,7 +6,7 @@ of retrieved documents by considering additional factors beyond
 just vector similarity.
 """
 
-from typing import List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional, Set
 from langchain_core.documents import Document
 import re
 
@@ -49,7 +49,7 @@ class PropertyReranker:
         query: str,
         documents: List[Document],
         initial_scores: Optional[List[float]] = None,
-        user_preferences: Optional[dict] = None,
+        user_preferences: Optional[Dict[str, Any]] = None,
         k: Optional[int] = None
     ) -> List[Tuple[Document, float]]:
         """
@@ -148,7 +148,7 @@ class PropertyReranker:
 
         return min(boost, 1.0)  # Cap at 1.0
 
-    def _calculate_metadata_boost(self, doc: Document, preferences: dict) -> float:
+    def _calculate_metadata_boost(self, doc: Document, preferences: Dict[str, Any]) -> float:
         """
         Calculate boost for metadata alignment with user preferences.
 
@@ -261,10 +261,10 @@ class PropertyReranker:
             return reranked
 
         # Track seen values for diversity
-        seen_cities = set()
-        seen_price_ranges = set()
+        seen_cities: Set[str] = set()
+        seen_price_ranges: Set[str] = set()
 
-        adjusted = []
+        adjusted: List[Tuple[Document, float]] = []
 
         for doc, score in reranked:
             adjusted_score = score

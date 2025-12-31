@@ -1,5 +1,3 @@
-import os
-import pytest
 from unittest.mock import patch
 
 from vector_store.chroma_store import ChromaPropertyStore

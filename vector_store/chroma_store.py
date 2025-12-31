@@ -5,34 +5,37 @@ This module provides a persistent vector store for property embeddings
 using ChromaDB with FastEmbed embeddings.
 """
 
-import os
-import logging
-from pathlib import Path
-from typing import List, Optional, Dict, Any
-from datetime import datetime
 import platform
+from datetime import datetime
+import logging
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, cast
+
 import pandas as pd
 
 import streamlit as st
 from langchain_chroma import Chroma
-try:
-    from chromadb.config import Settings as ChromaSettings
-except Exception:
-    ChromaSettings = None
-from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.callbacks import CallbackManagerForRetrieverRun
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
-try:
-    from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
-except Exception:
-    FastEmbedEmbeddings = None
-try:
-    from langchain_community.vectorstores.utils import filter_complex_metadata
-except Exception:
-    filter_complex_metadata = None
 
-from data.schemas import Property, PropertyCollection
 from config.settings import settings
+from data.schemas import Property, PropertyCollection
+
+_ChromaSettings: Any = None
+try:
+    from chromadb.config import Settings as _ChromaSettings
+except Exception:
+    pass
+
+_FastEmbedEmbeddings: Any = None
+try:
+    from langchain_community.embeddings.fastembed import FastEmbedEmbeddings as _FastEmbedEmbeddings
+except Exception:
+    pass
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -74,10 +77,10 @@ class ChromaPropertyStore:
         self.persist_directory.mkdir(parents=True, exist_ok=True)
 
         # Initialize embeddings
-        self.embeddings = self._create_embeddings(embedding_model)
+        self.embeddings: Optional[Embeddings] = self._create_embeddings(embedding_model)
 
         # Initialize or load vector store
-        self.vector_store = self._initialize_vector_store()
+        self.vector_store: Optional[Chroma] = self._initialize_vector_store()
 
         # Text splitter for long descriptions
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -87,18 +90,18 @@ class ChromaPropertyStore:
         )
 
         self._documents: List[Document] = []
-        self._doc_ids: set[str] = set()
+        self._doc_ids: Set[str] = set()
 
     @st.cache_resource
-    def _create_embeddings(_self, model_name: str):
+    def _create_embeddings(_self, model_name: str) -> Optional[Embeddings]:
         try:
             is_windows = platform.system().lower() == "windows"
             force_fastembed = os.getenv("CHROMA_FORCE_FASTEMBED") == "1" or os.getenv("FORCE_FASTEMBED") == "1"
-            if FastEmbedEmbeddings is not None and not is_windows:
-                return FastEmbedEmbeddings(model_name=model_name)
-            elif FastEmbedEmbeddings is not None and is_windows and force_fastembed:
-                return FastEmbedEmbeddings(model_name=model_name)
-            elif FastEmbedEmbeddings is not None and is_windows:
+            if _FastEmbedEmbeddings is not None and not is_windows:
+                return cast(Embeddings, _FastEmbedEmbeddings(model_name=model_name))
+            if _FastEmbedEmbeddings is not None and is_windows and force_fastembed:
+                return cast(Embeddings, _FastEmbedEmbeddings(model_name=model_name))
+            if _FastEmbedEmbeddings is not None and is_windows:
                 st.warning("FastEmbed is disabled on Windows for stability. Set CHROMA_FORCE_FASTEMBED=1 to force enable.")
         except Exception as e:
             st.warning(f"FastEmbed initialization failed: {e}")
@@ -107,13 +110,13 @@ class ChromaPropertyStore:
             from config import settings
             if settings.openai_api_key:
                 from langchain_openai import OpenAIEmbeddings
-                return OpenAIEmbeddings()
+                return cast(Embeddings, OpenAIEmbeddings())
         except Exception as e:
             st.warning(f"OpenAI embeddings unavailable: {e}")
 
         return None
 
-    def _initialize_vector_store(self) -> Chroma:
+    def _initialize_vector_store(self) -> Optional[Chroma]:
         """Initialize or load existing ChromaDB vector store."""
         if self.embeddings is None:
             st.warning("Embeddings unavailable; vector store features are disabled")
@@ -121,8 +124,8 @@ class ChromaPropertyStore:
 
         try:
             client_settings = None
-            if ChromaSettings is not None:
-                client_settings = ChromaSettings(anonymized_telemetry=False)
+            if _ChromaSettings is not None:
+                client_settings = _ChromaSettings(anonymized_telemetry=False)
 
             force_persist = os.getenv("CHROMA_FORCE_PERSIST") == "1"
             use_persist = force_persist or bool(settings.vector_persist_enabled)
@@ -183,7 +186,7 @@ class ChromaPropertyStore:
                 logger.error(f"In-memory Chroma init failed: {e2}")
                 raise
 
-    def property_to_document(self, property: Property) -> Document:
+    def property_to_document(self, prop: Property) -> Document:
         """
         Convert Property to LangChain Document.
 
@@ -194,47 +197,47 @@ class ChromaPropertyStore:
             Document with property text and metadata
         """
         # Create comprehensive text representation
-        text = property.to_search_text()
+        text = prop.to_search_text()
 
         # Create metadata (must be JSON-serializable)
-        def _nf(x):
+        def _nf(x: Any) -> Optional[float]:
             return float(x) if (x is not None and not pd.isna(x)) else None
 
         metadata = {
-            "id": property.id or "unknown",
-            "country": getattr(property, "country", None),
-            "region": getattr(property, "region", None),
-            "city": property.city,
-            "district": getattr(property, "district", None),
-            "price": _nf(property.price),
-            "rooms": (_nf(property.rooms) or 0.0),
-            "bathrooms": (_nf(property.bathrooms) or 0.0),
-            "price_per_sqm": _nf(getattr(property, "price_per_sqm", None)),
-            "currency": getattr(property, "currency", None),
-            "has_parking": property.has_parking,
-            "has_garden": property.has_garden,
-            "has_pool": property.has_pool,
-            "has_garage": property.has_garage,
-            "has_elevator": property.has_elevator,
-            "property_type": property.property_type.value if hasattr(property.property_type, "value") else str(property.property_type),
-            "listing_type": property.listing_type.value if hasattr(property.listing_type, "value") else str(property.listing_type),
-            "source_url": property.source_url or "",
-            "lat": _nf(getattr(property, "latitude", None)),
-            "lon": _nf(getattr(property, "longitude", None)),
+            "id": prop.id or "unknown",
+            "country": getattr(prop, "country", None),
+            "region": getattr(prop, "region", None),
+            "city": prop.city,
+            "district": getattr(prop, "district", None),
+            "price": _nf(prop.price),
+            "rooms": (_nf(prop.rooms) or 0.0),
+            "bathrooms": (_nf(prop.bathrooms) or 0.0),
+            "price_per_sqm": _nf(getattr(prop, "price_per_sqm", None)),
+            "currency": getattr(prop, "currency", None),
+            "has_parking": prop.has_parking,
+            "has_garden": prop.has_garden,
+            "has_pool": prop.has_pool,
+            "has_garage": prop.has_garage,
+            "has_elevator": prop.has_elevator,
+            "property_type": prop.property_type.value if hasattr(prop.property_type, "value") else str(prop.property_type),
+            "listing_type": prop.listing_type.value if hasattr(prop.listing_type, "value") else str(prop.listing_type),
+            "source_url": prop.source_url or "",
+            "lat": _nf(getattr(prop, "latitude", None)),
+            "lon": _nf(getattr(prop, "longitude", None)),
         }
 
         # Add optional fields if present
-        if property.neighborhood:
-            metadata["neighborhood"] = property.neighborhood
+        if prop.neighborhood:
+            metadata["neighborhood"] = prop.neighborhood
 
-        if property.area_sqm is not None and not pd.isna(property.area_sqm):
-            metadata["area_sqm"] = float(property.area_sqm)
+        if prop.area_sqm is not None and not pd.isna(prop.area_sqm):
+            metadata["area_sqm"] = float(prop.area_sqm)
 
-        if property.price_per_sqm is not None and not pd.isna(property.price_per_sqm):
-            metadata["price_per_sqm"] = float(property.price_per_sqm)
+        if prop.price_per_sqm is not None and not pd.isna(prop.price_per_sqm):
+            metadata["price_per_sqm"] = float(prop.price_per_sqm)
 
-        if property.negotiation_rate:
-            metadata["negotiation_rate"] = property.negotiation_rate.value if hasattr(property.negotiation_rate, "value") else str(property.negotiation_rate)
+        if prop.negotiation_rate:
+            metadata["negotiation_rate"] = prop.negotiation_rate.value if hasattr(prop.negotiation_rate, "value") else str(prop.negotiation_rate)
 
         # Sanitize metadata: only primitives (str, int, float, bool, None); convert datetimes
         def _sanitize_val(v: Any) -> Any:
@@ -283,7 +286,7 @@ class ChromaPropertyStore:
         Returns:
             Number of properties added
         """
-        documents = []
+        documents: List[Document] = []
 
         for prop in properties:
             try:
@@ -314,14 +317,8 @@ class ChromaPropertyStore:
             batch = documents[i:i + batch_size]
 
             try:
-                cleaned_batch: List[Document] = []
-                for d in batch:
-                    if filter_complex_metadata is not None:
-                        md = filter_complex_metadata(d.metadata)
-                        d = Document(page_content=d.page_content, metadata=md)
-                    cleaned_batch.append(d)
-                ids = [str(d.metadata.get("id", f"doc-{i+j}")) for j, d in enumerate(cleaned_batch)]
-                self.vector_store.add_documents(cleaned_batch, ids=ids)
+                ids = [str(d.metadata.get("id", f"doc-{i+j}")) for j, d in enumerate(batch)]
+                self.vector_store.add_documents(batch, ids=ids)
                 total_added += len(batch)
                 logger.info(f"Added batch {i // batch_size + 1}: {len(batch)} properties")
 
@@ -361,7 +358,7 @@ class ChromaPropertyStore:
         query: str,
         k: int = 5,
         filter: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs: Any
     ) -> List[tuple[Document, float]]:
         """
         Search for properties by semantic similarity.
@@ -424,7 +421,10 @@ class ChromaPropertyStore:
         Returns:
             List of matching documents
         """
-        filter_dict = {}
+        if self.vector_store is None:
+            return []
+
+        filter_dict: Dict[str, Any] = {}
 
         if city:
             filter_dict["city"] = city
@@ -467,8 +467,8 @@ class ChromaPropertyStore:
         search_type: str = "mmr",
         k: int = 5,
         fetch_k: int = 20,
-        **kwargs
-    ):
+        **kwargs: Any
+    ) -> BaseRetriever:
         """
         Get a LangChain retriever for this vector store.
 
@@ -496,7 +496,15 @@ class ChromaPropertyStore:
             class FallbackRetriever(BaseRetriever):
                 docs: List[Document]
                 kk: int
-                def get_relevant_documents(self, query: str) -> List[Document]:
+                class Config:
+                    arbitrary_types_allowed = True
+
+                def _get_relevant_documents(
+                    self,
+                    query: str,
+                    *,
+                    run_manager: Optional[CallbackManagerForRetrieverRun] = None,
+                ) -> List[Document]:
                     q = [t for t in query.lower().split() if t]
                     scored: List[tuple[Document, float]] = []
                     for d in self.docs:
@@ -508,7 +516,7 @@ class ChromaPropertyStore:
                     return [d for d, _s in scored[:self.kk]]
             return FallbackRetriever(docs=self._documents, kk=k)
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all documents from the vector store."""
         try:
             if self.vector_store is not None:
@@ -558,7 +566,7 @@ class ChromaPropertyStore:
         except Exception as e:
             return {"error": str(e), "total_documents": len(self._documents)}
 
-    def delete_by_source(self, source_url: str):
+    def delete_by_source(self, source_url: str) -> None:
         """
         Delete all properties from a specific source.
 
@@ -566,6 +574,8 @@ class ChromaPropertyStore:
             source_url: Source URL to filter by
         """
         try:
+            if self.vector_store is None:
+                return
             self.vector_store.delete(
                 filter={"source_url": source_url}
             )

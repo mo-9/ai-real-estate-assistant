@@ -53,6 +53,7 @@ The AI Real Estate Assistant is a conversational AI application that helps users
   - Enhanced form label visibility
 - **Geospatial Filters & Expert Panel**:
   - Radius-based filters around selected city
+  - Chat retrieval filters: listing type, min/max price, sorting (price/price per sqm/rooms)
   - City price indices (avg/median, price per sqm)
   - Dedicated Expert Panel UI in Market Insights
 - **Tailwind CSS Integration**: Modern utility-first CSS framework
@@ -434,6 +435,7 @@ See detailed phase docs:
 
 Recent changes in V3:
 - Geospatial radius filter for property selection (Expert Panel)
+- Chat retrieval price range filters and sorting controls
 - City price indices in Market Insights (avg/median, price per sqm)
 - Dropdown UI polish — removed blue accents, unified neutral states
 - Documentation restructured under `docs/` and updated status notices

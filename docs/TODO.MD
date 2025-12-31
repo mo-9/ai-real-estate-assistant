@@ -101,10 +101,11 @@
   - [DONE] Monthly price index with YoY (Expert Panel)
   - [DONE] Moving average smoothing and anomaly detection (z-score)
   - [DONE] Map picker (click to set radius center) wired to retriever
+  - [DONE] Chat retrieval price range filters and sorting controls
   - [DONE] Multi-city YoY latest with UI table and leaders
   - [DONE] Deterministic lat/lon fill at ingestion for known cities
-  - Map with filters, neutral UI states
-  - Base digest (consumer/expert)
+  - Map with filters, neutral UI states (est: 2–3 days)
+  - Base digest (consumer/expert) (est: 2–4 days)
 - Sprint 2 (2–3 weeks)
   - Indices and comparables for CIS/Russia/Turkey/USA/Africa
   - Yield/ROI, rate/expense scenarios

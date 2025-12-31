@@ -5,7 +5,7 @@
 - Query Analyzer (intent, filters)
 - Hybrid processing: simple → RAG, complex → Agent + Tools
 - Tools: mortgage, comparison, analysis
-- Retriever: ChromaDB (semantic + keyword, MMR), AdvancedPropertyRetriever (geo radius, price filters)
+- Retriever: ChromaDB (semantic + keyword, MMR), AdvancedPropertyRetriever (geo radius, price filters, sorting)
 - Reranker (multi-signal)
 - Response formatter
 
@@ -20,7 +20,7 @@
 
 ## Key Data Flows
 - Data load → embeddings → ChromaDB persist → hybrid retrieval → rerank → response
-- Expert Panel → geo radius/indices/time‑series → export digest
+- Expert Panel → retrieval filters (geo radius, listing type, price, sort) + indices/time‑series → export digest
 
 ---
 
@@ -29,7 +29,7 @@
 ## System Overview
 - Next.js web app (chat, search, dashboards, exports)
 - Backend API (chat orchestration, tools, retrieval, analytics, notifications)
-- Retrieval service (vector store + keyword + metadata + geo) behind API contracts
+- Retrieval service (vector store + keyword + metadata + geo + sorting) behind API contracts
 - Provider abstraction for multi-LLM support with consistent settings and policy controls
 - Optional voice layer (ElevenLabs) for TTS/voice UX
 

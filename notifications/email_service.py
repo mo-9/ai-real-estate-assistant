@@ -7,6 +7,7 @@ with HTML templates, retry logic, and rate limiting.
 
 import smtplib
 import time
+import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
@@ -393,3 +394,55 @@ class EmailServiceFactory:
         )
 
         return EmailService(config)
+
+    @staticmethod
+    def create_from_env(prefix: str = "SMTP_") -> Optional[EmailService]:
+        provider_raw = os.getenv(f"{prefix}PROVIDER", "").strip().lower()
+        if not provider_raw:
+            return None
+
+        username = os.getenv(f"{prefix}USERNAME", "").strip()
+        password = os.getenv(f"{prefix}PASSWORD", "")
+        if not username or not password:
+            return None
+
+        from_email = os.getenv(f"{prefix}FROM_EMAIL", "").strip() or username
+        from_name = os.getenv(f"{prefix}FROM_NAME", "").strip() or "Real Estate Assistant"
+
+        use_tls_raw = os.getenv(f"{prefix}USE_TLS", "true").strip().lower()
+        use_ssl_raw = os.getenv(f"{prefix}USE_SSL", "false").strip().lower()
+        use_tls = use_tls_raw in {"1", "true", "yes", "y", "on"}
+        use_ssl = use_ssl_raw in {"1", "true", "yes", "y", "on"}
+
+        timeout_raw = os.getenv(f"{prefix}TIMEOUT", "").strip()
+        timeout = int(timeout_raw) if timeout_raw.isdigit() else 30
+
+        if provider_raw == EmailProvider.GMAIL.value:
+            svc = EmailServiceFactory.create_gmail_service(username=username, password=password, from_name=from_name)
+            svc.config.timeout = timeout
+            return svc
+
+        if provider_raw == EmailProvider.OUTLOOK.value:
+            svc = EmailServiceFactory.create_outlook_service(username=username, password=password, from_name=from_name)
+            svc.config.timeout = timeout
+            return svc
+
+        if provider_raw == EmailProvider.CUSTOM.value:
+            smtp_server = os.getenv(f"{prefix}SERVER", "").strip()
+            smtp_port_raw = os.getenv(f"{prefix}PORT", "").strip()
+            if not smtp_server or not smtp_port_raw.isdigit():
+                return None
+            smtp_port = int(smtp_port_raw)
+
+            return EmailServiceFactory.create_custom_service(
+                smtp_server=smtp_server,
+                smtp_port=smtp_port,
+                username=username,
+                password=password,
+                from_email=from_email,
+                from_name=from_name,
+                use_tls=use_tls,
+                use_ssl=use_ssl,
+            )
+
+        return None

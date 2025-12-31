@@ -14,6 +14,7 @@ from unittest.mock import Mock
 from datetime import datetime, timedelta
 import tempfile
 import shutil
+from pathlib import Path
 
 from data.schemas import Property, PropertyType, PropertyCollection
 from notifications import (
@@ -23,10 +24,10 @@ from notifications import (
     EmailProvider,
     EmailServiceFactory,
     AlertManager,
-    AlertType,
     NotificationPreferences,
     NotificationPreferencesManager,
     AlertFrequency,
+    DigestDay,
     create_default_preferences,
     # Templates
     PriceDropTemplate,
@@ -38,6 +39,8 @@ from notifications import (
     NotificationStatus,
     NotificationType
 )
+from notifications.notification_preferences import AlertType as PrefAlertType, DigestScheduler
+from utils.saved_searches import SavedSearchManager, SavedSearch
 
 
 # ============================================================================
@@ -322,7 +325,7 @@ class TestNotificationPreferences:
 
         assert prefs.user_email == 'user@example.com'
         assert prefs.alert_frequency == AlertFrequency.DAILY
-        assert AlertType.PRICE_DROP in prefs.enabled_alerts
+        assert PrefAlertType.PRICE_DROP in prefs.enabled_alerts
         assert prefs.price_drop_threshold == 5.0
         assert prefs.enabled is True
 
@@ -330,12 +333,12 @@ class TestNotificationPreferences:
         """Test checking if alert type is enabled."""
         prefs = NotificationPreferences(
             user_email='user@example.com',
-            enabled_alerts={AlertType.PRICE_DROP, AlertType.NEW_PROPERTY}
+            enabled_alerts={PrefAlertType.PRICE_DROP, PrefAlertType.NEW_PROPERTY}
         )
 
-        assert prefs.is_alert_enabled(AlertType.PRICE_DROP) is True
-        assert prefs.is_alert_enabled(AlertType.NEW_PROPERTY) is True
-        assert prefs.is_alert_enabled(AlertType.MARKET_UPDATE) is False
+        assert prefs.is_alert_enabled(PrefAlertType.PRICE_DROP) is True
+        assert prefs.is_alert_enabled(PrefAlertType.NEW_PROPERTY) is True
+        assert prefs.is_alert_enabled(PrefAlertType.MARKET_UPDATE) is False
 
     def test_quiet_hours_check(self):
         """Test quiet hours checking."""
@@ -357,25 +360,25 @@ class TestNotificationPreferences:
         """Test alert sending decision logic."""
         prefs = NotificationPreferences(
             user_email='user@example.com',
-            enabled_alerts={AlertType.PRICE_DROP},
+            enabled_alerts={PrefAlertType.PRICE_DROP},
             max_alerts_per_day=10
         )
 
         # Should send - alert enabled, not at limit
-        assert prefs.should_send_alert(AlertType.PRICE_DROP, alerts_sent_today=5) is True
+        assert prefs.should_send_alert(PrefAlertType.PRICE_DROP, alerts_sent_today=5) is True
 
         # Should not send - disabled alert type
-        assert prefs.should_send_alert(AlertType.MARKET_UPDATE, alerts_sent_today=5) is False
+        assert prefs.should_send_alert(PrefAlertType.MARKET_UPDATE, alerts_sent_today=5) is False
 
         # Should not send - at daily limit
-        assert prefs.should_send_alert(AlertType.PRICE_DROP, alerts_sent_today=10) is False
+        assert prefs.should_send_alert(PrefAlertType.PRICE_DROP, alerts_sent_today=10) is False
 
     def test_preferences_to_dict_and_back(self):
         """Test serialization and deserialization."""
         prefs = NotificationPreferences(
             user_email='user@example.com',
             alert_frequency=AlertFrequency.WEEKLY,
-            enabled_alerts={AlertType.PRICE_DROP}
+            enabled_alerts={PrefAlertType.PRICE_DROP}
         )
 
         # Convert to dict
@@ -463,6 +466,158 @@ class TestNotificationPreferencesManager:
         assert stats['total_users'] == 2
         assert stats['enabled_users'] == 1
         assert stats['disabled_users'] == 1
+
+
+# ============================================================================
+# Digest Scheduler Tests
+# ============================================================================
+
+class TestDigestScheduler:
+    """Tests for digest scheduler."""
+
+    @pytest.fixture
+    def scheduler_context(self, temp_dir, monkeypatch):
+        from utils import property_cache
+
+        cache_dir = Path(temp_dir) / "app_cache"
+        monkeypatch.setattr(property_cache, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(property_cache, "CACHE_FILE", cache_dir / "properties.json")
+        monkeypatch.setattr(property_cache, "PREV_CACHE_FILE", cache_dir / "properties_prev.json")
+
+        prefs_manager = NotificationPreferencesManager(storage_path=str(Path(temp_dir) / "prefs"))
+        history = NotificationHistory(storage_path=str(Path(temp_dir) / "history"))
+        search_manager = SavedSearchManager(storage_path=str(Path(temp_dir) / "user_data"))
+
+        email_service = Mock(spec=EmailService)
+        email_service.send_email = Mock(return_value=True)
+
+        scheduler = DigestScheduler(
+            email_service=email_service,
+            prefs_manager=prefs_manager,
+            history=history,
+            search_manager=search_manager,
+            poll_interval_seconds=1,
+            storage_path_alerts=str(Path(temp_dir) / "alerts"),
+        )
+
+        return {
+            "property_cache": property_cache,
+            "prefs_manager": prefs_manager,
+            "history": history,
+            "search_manager": search_manager,
+            "email_service": email_service,
+            "scheduler": scheduler,
+        }
+
+    def test_daily_digest_sends_and_includes_saved_search_matches(self, scheduler_context):
+        property_cache = scheduler_context["property_cache"]
+        prefs_manager = scheduler_context["prefs_manager"]
+        history = scheduler_context["history"]
+        search_manager = scheduler_context["search_manager"]
+        email_service = scheduler_context["email_service"]
+        scheduler = scheduler_context["scheduler"]
+
+        user_email = "user@example.com"
+        prefs_manager.update_preferences(
+            user_email,
+            alert_frequency=AlertFrequency.DAILY,
+            daily_digest_time="09:00",
+            enabled_alerts={PrefAlertType.PRICE_DROP, PrefAlertType.NEW_PROPERTY, PrefAlertType.SAVED_SEARCH_MATCH},
+        )
+
+        search_manager.save_search(SavedSearch(id="s1", name="Krakow Deals", city="Krakow", min_rooms=2))
+
+        previous = PropertyCollection(
+            properties=[
+                Property(
+                    id="p1",
+                    city="Krakow",
+                    price=1000,
+                    rooms=2,
+                    bathrooms=1,
+                    area_sqm=50,
+                    property_type=PropertyType.APARTMENT,
+                )
+            ],
+            total_count=1,
+        )
+        property_cache.save_collection(previous)
+
+        current = PropertyCollection(
+            properties=[
+                previous.properties[0],
+                Property(
+                    id="p2",
+                    city="Krakow",
+                    price=900,
+                    rooms=2,
+                    bathrooms=1,
+                    area_sqm=55,
+                    property_type=PropertyType.APARTMENT,
+                ),
+            ],
+            total_count=2,
+        )
+        property_cache.save_collection(current)
+
+        now = datetime(2025, 1, 1, 9, 0)
+        result = scheduler.run_pending(now=now)
+
+        assert result["sent"]["daily"] == 1
+        email_service.send_email.assert_called_once()
+        sent_body = email_service.send_email.call_args.kwargs["body"]
+        assert "Krakow Deals" in sent_body
+        assert "1 new match" in sent_body
+
+        records = history.get_user_notifications(user_email, notification_type=NotificationType.DIGEST_DAILY)
+        assert len(records) == 1
+        assert records[0].status == NotificationStatus.SENT
+
+        result_again = scheduler.run_pending(now=now)
+        assert result_again["sent"]["daily"] == 0
+
+    def test_weekly_digest_sends_only_on_configured_day(self, scheduler_context):
+        property_cache = scheduler_context["property_cache"]
+        prefs_manager = scheduler_context["prefs_manager"]
+        email_service = scheduler_context["email_service"]
+        scheduler = scheduler_context["scheduler"]
+
+        user_email = "weekly@example.com"
+        prefs_manager.update_preferences(
+            user_email,
+            alert_frequency=AlertFrequency.WEEKLY,
+            daily_digest_time="09:00",
+            weekly_digest_day=DigestDay.WEDNESDAY,
+        )
+
+        previous = PropertyCollection(
+            properties=[
+                Property(
+                    id="w1",
+                    city="Warsaw",
+                    price=1200,
+                    rooms=3,
+                    bathrooms=2,
+                    area_sqm=75,
+                    property_type=PropertyType.APARTMENT,
+                )
+            ],
+            total_count=1,
+        )
+        property_cache.save_collection(previous)
+        property_cache.save_collection(previous)
+
+        email_service.send_email.reset_mock()
+
+        not_wednesday = datetime(2025, 1, 2, 9, 0)
+        result = scheduler.run_pending(now=not_wednesday)
+        assert result["sent"]["weekly"] == 0
+        email_service.send_email.assert_not_called()
+
+        wednesday = datetime(2025, 1, 1, 9, 0)
+        result = scheduler.run_pending(now=wednesday)
+        assert result["sent"]["weekly"] == 1
+        email_service.send_email.assert_called_once()
 
 
 # ============================================================================

@@ -394,7 +394,7 @@ class DigestTemplate(EmailTemplate):
 
         # Add trending cities if available
         if trending_cities:
-            content += f"""
+            content += """
 <div style="margin: 25px 0;">
     <h3>🔥 Trending Cities</h3>
     <ul style="line-height: 2;">
@@ -405,7 +405,7 @@ class DigestTemplate(EmailTemplate):
 
         # Add saved searches status if available
         if saved_searches:
-            content += f"""
+            content += """
 <div style="margin: 25px 0;">
     <h3>🔔 Your Saved Searches</h3>
 """

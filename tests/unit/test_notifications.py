@@ -10,31 +10,23 @@ Tests:
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock
 from datetime import datetime, timedelta
-from pathlib import Path
 import tempfile
 import shutil
 
 from data.schemas import Property, PropertyType, PropertyCollection
-from utils import SavedSearch
 from notifications import (
     # Email Service
     EmailService,
     EmailConfig,
     EmailProvider,
     EmailServiceFactory,
-    EmailValidationError,
-    EmailSendError,
-    # Alert Manager
     AlertManager,
     AlertType,
-    Alert,
-    # Preferences
     NotificationPreferences,
     NotificationPreferencesManager,
     AlertFrequency,
-    DigestDay,
     create_default_preferences,
     # Templates
     PriceDropTemplate,
@@ -43,7 +35,6 @@ from notifications import (
     TestEmailTemplate,
     # History
     NotificationHistory,
-    NotificationRecord,
     NotificationStatus,
     NotificationType
 )

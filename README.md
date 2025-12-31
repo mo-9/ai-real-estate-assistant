@@ -10,6 +10,9 @@
 
 > Note: Version 3 (V3) is under active development. Bugs and behavior changes may occur.
 > For a stable, non-evolving release, please use the V2 branch: https://github.com/AleksNeStu/ai-real-estate-assistant/tree/ver2
+>
+> Version 4 (V4) is the next-generation web rewrite (Next.js + ElevenLabs), targeting Vercel deployment:
+> https://github.com/AleksNeStu/ai-real-estate-assistant/tree/ver4
 
 ## 🌟 Overview
 
@@ -322,19 +325,20 @@ See `docs/PROJECT_STRUCTURE.md` for an up‑to‑date layout.
 
 ## 🎯 Version Comparison
 
-| Feature | V1 (Legacy) | V2 (Legacy) | **V3 (Modern)** |
-|---------|-------------|-------------|-----------------|
-| **UI Framework** | Basic Streamlit | Enhanced Streamlit | **Modern Streamlit** |
-| **AI Models** | 1 (GPT-3.5) | 4 (GPT + Ollama) | **15+ (4 providers)** |
-| **Vector Store** | ❌ None | In-memory (ephemeral) | **✅ Persistent ChromaDB** |
-| **Query Intelligence** | ❌ No | ❌ No | **✅ Intent analysis** |
-| **Agent System** | DataFrame only | ❌ No | **✅ Hybrid RAG + Tools** |
-| **Tools** | ❌ No | ❌ No | **✅ 4 specialized tools** |
-| **Reranking** | ❌ No | ❌ No | **✅ Multi-signal** |
-| **Type Safety** | ❌ No | Partial | **✅ Full (Pydantic)** |
-| **Memory** | Single turn | Multi-turn | **✅ Advanced memory** |
-| **Performance** | Slow | Medium | **✅ Optimized** |
-| **Extensibility** | Low | Medium | **✅ High (modular)** |
+| Feature | V1 (Legacy) | V2 (Legacy) | **V3 (Modern)** | **V4 (Web, planned)** |
+|---------|-------------|-------------|-----------------|-----------------------|
+| **UI Framework** | Basic Streamlit | Enhanced Streamlit | **Modern Streamlit** | **Next.js (App Router) + Tailwind** |
+| **AI Models** | 1 (GPT-3.5) | 4 (GPT + Ollama) | **25+ (6 providers)** | **Same providers via backend API** |
+| **Vector Store** | ❌ None | In-memory (ephemeral) | **✅ Persistent ChromaDB** | **Service-backed retrieval (API) + caching** |
+| **Query Intelligence** | ❌ No | ❌ No | **✅ Intent analysis** | **✅ Intent analysis (API)** |
+| **Agent System** | DataFrame only | ❌ No | **✅ Hybrid RAG + Tools** | **✅ Hybrid orchestration (API)** |
+| **Tools** | ❌ No | ❌ No | **✅ 4 specialized tools** | **✅ Tools as API actions** |
+| **Reranking** | ❌ No | ❌ No | **✅ Multi-signal** | **✅ Multi-signal + eval harness** |
+| **Type Safety** | ❌ No | Partial | **✅ Full (Pydantic)** | **✅ Typed API contracts + validation** |
+| **Memory** | Single turn | Multi-turn | **✅ Advanced memory** | **✅ Session memory + persistence** |
+| **Voice** | ❌ No | ❌ No | ❌ No | **✅ ElevenLabs (TTS/voice)** |
+| **Deployment** | Local scripts | Local scripts | Streamlit Cloud / Docker | **Vercel (web) + containerized API** |
+| **Extensibility** | Low | Medium | **✅ High (modular)** | **✅ High (frontend/backend split)** |
 
 ---
 

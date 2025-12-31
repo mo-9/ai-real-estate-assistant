@@ -22,3 +22,17 @@
 - Data load → embeddings → ChromaDB persist → hybrid retrieval → rerank → response
 - Expert Panel → geo radius/indices/time‑series → export digest
 
+---
+
+# Target Architecture (V4)
+
+## System Overview
+- Next.js web app (chat, search, dashboards, exports)
+- Backend API (chat orchestration, tools, retrieval, analytics, notifications)
+- Retrieval service (vector store + keyword + metadata + geo) behind API contracts
+- Provider abstraction for multi-LLM support with consistent settings and policy controls
+- Optional voice layer (ElevenLabs) for TTS/voice UX
+
+## Deployment Target
+- Web: Vercel
+- API: container-based deployment (separate from web), versioned endpoints

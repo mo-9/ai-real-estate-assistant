@@ -55,6 +55,45 @@
 - Tests: unit for analytics, integration for retriever, e2e UI
 - Quality gates: ruff/mypy/bandit (enabled in CI)
 
+---
+
+## V4 (Next.js + ElevenLabs + Vercel) Roadmap
+
+### Goal
+- Ship a production-grade web application (V4) while keeping V3 as reference implementation.
+
+### Backend: 10 Functional Requirements
+- Provide authenticated API for search, chat, and tools
+- Support hybrid retrieval (semantic + keyword) with metadata filters
+- Support geospatial filters (radius) and sorting (price, price/m²)
+- Support multi-provider LLM execution with consistent configuration
+- Support conversation sessions with persisted history and replay
+- Support streaming responses (SSE/WebSocket) for chat and tool progress
+- Support tool actions (mortgage, comparison, price analysis, location analysis)
+- Support exports (CSV/Excel/JSON/Markdown/PDF) with reproducible inputs
+- Support notifications pipeline (alerts, digests) with user preferences
+- Provide admin endpoints for ingestion/reindexing and health checks
+
+### Platform: 10 Non-Functional Requirements
+- Security: API keys never exposed to clients; least-privilege secrets management
+- Reliability: graceful degradation when providers/vector store are unavailable
+- Performance: p95 < 2s for retrieval; p95 < 8s for hybrid answers (typical)
+- Scalability: stateless API where possible; horizontal scaling ready
+- Observability: structured logs, traces, metrics, request IDs, audit events
+- Cost controls: provider rate limits, budgets, caching, model routing policies
+- Testability: unit/integration/e2e coverage with deterministic stubs
+- Maintainability: clear module boundaries; versioned API contracts
+- Compatibility: works on Vercel for web, container for API; local dev parity
+- Compliance: data minimization, retention rules, and redaction for sensitive fields
+
+### Epics (split for implementation)
+- Frontend (Next.js): UI shell, auth UI, chat, search, expert dashboards
+- API (Python): endpoints, streaming, session persistence, tool execution
+- Retrieval: vector store service + indexing + geo filters + reranking
+- Analytics: indices, trends, anomaly detection, export endpoints
+- Notifications: digests, schedules, templates, preference management
+- DevOps: CI gates, environments, secrets, deploy pipelines, monitoring
+
 ## Sprints
 - Sprint 1 (1–2 weeks)
   - [DONE] Schema extension (country/region/district/currency, lat/lon)

@@ -4,6 +4,9 @@ Welcome to the comprehensive documentation for the AI Real Estate Assistant proj
 
 > Status: Version 3 (V3) is under active development. Bugs and UI changes may occur.
 > For a stable release without ongoing improvements, use the V2 branch: https://github.com/AleksNeStu/ai-real-estate-assistant/tree/ver2
+>
+> Version 4 (V4) is the next-generation web rewrite (Next.js + ElevenLabs) targeting Vercel deployment:
+> https://github.com/AleksNeStu/ai-real-estate-assistant/tree/ver4
 
 ## 📚 Documentation Structure
 

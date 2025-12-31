@@ -70,6 +70,7 @@ from notifications import (
     NotificationHistory,
     TestEmailTemplate
 )
+from notifications.notification_preferences import DigestScheduler
 
 # Internationalization
 from i18n import get_text, get_available_languages
@@ -90,6 +91,15 @@ st.set_page_config(
 load_and_inject_styles()
 inject_enhanced_form_styles()
 inject_tailwind_cdn()
+
+@st.cache_resource
+def get_digest_scheduler():
+    email_service = EmailServiceFactory.create_from_env()
+    if email_service is None:
+        return None
+    scheduler = DigestScheduler(email_service=email_service)
+    scheduler.start()
+    return scheduler
 
 
 def initialize_session_state():
@@ -119,6 +129,11 @@ def initialize_session_state():
 
     if "data_loaded" not in st.session_state:
         st.session_state.data_loaded = bool(st.session_state.property_collection)
+
+    try:
+        get_digest_scheduler()
+    except Exception:
+        pass
 
     if st.session_state.property_collection is not None and st.session_state.vector_store is None:
         try:
@@ -2039,20 +2054,18 @@ def render_notifications_tab():
         # Save preferences button
         if st.button("💾 Save Notification Preferences", type="primary"):
             try:
+                from notifications.notification_preferences import AlertType as PrefAlertType
+
                 # Build enabled alerts set
                 enabled_alerts = set()
                 if enable_price_drops:
-                    from notifications.alert_manager import AlertType as AMAlertType
-                    enabled_alerts.add(AMAlertType.PRICE_DROP)
+                    enabled_alerts.add(PrefAlertType.PRICE_DROP)
                 if enable_new_properties:
-                    from notifications.alert_manager import AlertType as AMAlertType
-                    enabled_alerts.add(AMAlertType.NEW_PROPERTY)
+                    enabled_alerts.add(PrefAlertType.NEW_PROPERTY)
                 if enable_saved_searches:
-                    from notifications.alert_manager import AlertType as AMAlertType
-                    enabled_alerts.add(AMAlertType.SAVED_SEARCH_MATCH)
+                    enabled_alerts.add(PrefAlertType.SAVED_SEARCH_MATCH)
                 if enable_market_updates:
-                    from notifications.alert_manager import AlertType as AMAlertType
-                    enabled_alerts.add(AMAlertType.MARKET_UPDATE)
+                    enabled_alerts.add(PrefAlertType.MARKET_UPDATE)
 
                 # Update preferences
                 prefs_manager.update_preferences(

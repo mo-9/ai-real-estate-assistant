@@ -25,21 +25,26 @@ import streamlit as st
 import pandas as pd
 import uuid
 from datetime import datetime
+import logging
 
 # Import our custom modules
 from config import settings, update_api_key
 from models.provider_factory import ModelProviderFactory, get_model_display_info
 from vector_store.chroma_store import get_vector_store
-from vector_store.hybrid_retriever import create_retriever
 from vector_store.reranker import create_reranker
 from data.csv_loader import DataLoaderCsv
 from data.schemas import PropertyCollection
 from streaming import StreamHandler
 from utils.ollama_detector import OllamaDetector
 from utils.api_key_validator import APIKeyValidator
+from ai.app_services import (
+    create_llm as svc_create_llm,
+    create_property_retriever as svc_create_property_retriever,
+    create_conversation_chain as svc_create_conversation_chain,
+    create_hybrid_agent_instance as svc_create_hybrid_agent_instance,
+)
 
 # Phase 2 imports
-from agents.hybrid_agent import create_hybrid_agent
 from agents.query_analyzer import analyze_query
 from agents.recommendation_engine import create_recommendation_engine
 
@@ -70,9 +75,8 @@ from notifications import (
 from i18n import get_text, get_available_languages
 
 # LangChain imports
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
 
+logger = logging.getLogger(__name__)
 
 # Page configuration
 st.set_page_config(
@@ -760,7 +764,7 @@ def load_into_vector_store(collection: PropertyCollection):
             replace_existing=False
         )
 
-        print(f"Added {added} properties to vector store")
+        logger.info("Added %s properties to vector store", added)
 
     except Exception as e:
         st.error(f"Error loading into vector store: {e}")
@@ -777,48 +781,30 @@ def create_conversation_chain():
         max_tokens = st.session_state.get("max_tokens", settings.default_max_tokens)
         k_results = st.session_state.get("k_results", settings.default_k_results)
 
-        # Create model
         stream_handler = StreamHandler(st.empty())
-        llm = ModelProviderFactory.create_model(
-            model_id=model_id,
+        llm = svc_create_llm(
             provider_name=provider_name,
+            model_id=model_id,
             temperature=temperature,
             max_tokens=max_tokens,
             streaming=True,
-            callbacks=[stream_handler]
+            callbacks=[stream_handler],
         )
 
-        # Create retriever
-        center_lat = st.session_state.get("geo_center_lat")
-        center_lon = st.session_state.get("geo_center_lon")
-        radius_km = st.session_state.get("geo_radius_km")
-        retriever = create_retriever(
+        retriever = svc_create_property_retriever(
             vector_store=st.session_state.vector_store,
-            k=k_results,
-            search_type="mmr",
-            center_lat=center_lat,
-            center_lon=center_lon,
-            radius_km=radius_km,
-            forced_filters={("listing_type"): ("rent" if st.session_state.get("listing_type_filter") == "Rent" else ("sale" if st.session_state.get("listing_type_filter") == "Sale" else None))} if st.session_state.get("listing_type_filter") in ("Rent","Sale") else None
+            k_results=k_results,
+            center_lat=st.session_state.get("geo_center_lat"),
+            center_lon=st.session_state.get("geo_center_lon"),
+            radius_km=st.session_state.get("geo_radius_km"),
+            listing_type_filter=st.session_state.get("listing_type_filter"),
         )
 
-        # Create memory
-        memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True,
-            output_key="answer"
-        )
-
-        # Create chain
-        chain = ConversationalRetrievalChain.from_llm(
+        return svc_create_conversation_chain(
             llm=llm,
             retriever=retriever,
-            memory=memory,
-            return_source_documents=True,
-            verbose=True
+            verbose=True,
         )
-
-        return chain
 
     except Exception as e:
         st.error(f"Error creating conversation chain: {e}")
@@ -835,38 +821,28 @@ def create_hybrid_agent_instance():
         max_tokens = st.session_state.get("max_tokens", settings.default_max_tokens)
         k_results = st.session_state.get("k_results", settings.default_k_results)
 
-        # Create model
-        llm = ModelProviderFactory.create_model(
-            model_id=model_id,
+        llm = svc_create_llm(
             provider_name=provider_name,
+            model_id=model_id,
             temperature=temperature,
             max_tokens=max_tokens,
-            streaming=False,  # Agent doesn't support streaming in same way
+            streaming=False,
         )
 
-        # Create retriever
-        center_lat = st.session_state.get("geo_center_lat")
-        center_lon = st.session_state.get("geo_center_lon")
-        radius_km = st.session_state.get("geo_radius_km")
-        retriever = create_retriever(
+        retriever = svc_create_property_retriever(
             vector_store=st.session_state.vector_store,
-            k=k_results,
-            search_type="mmr",
-            center_lat=center_lat,
-            center_lon=center_lon,
-            radius_km=radius_km,
-            forced_filters={("listing_type"): ("rent" if st.session_state.get("listing_type_filter") == "Rent" else ("sale" if st.session_state.get("listing_type_filter") == "Sale" else None))} if st.session_state.get("listing_type_filter") in ("Rent","Sale") else None
+            k_results=k_results,
+            center_lat=st.session_state.get("geo_center_lat"),
+            center_lon=st.session_state.get("geo_center_lon"),
+            radius_km=st.session_state.get("geo_radius_km"),
+            listing_type_filter=st.session_state.get("listing_type_filter"),
         )
 
-        # Create hybrid agent
-        agent = create_hybrid_agent(
+        return svc_create_hybrid_agent_instance(
             llm=llm,
             retriever=retriever,
-            use_tools=True,
-            verbose=True
+            verbose=True,
         )
-
-        return agent
 
     except Exception as e:
         st.error(f"Error creating hybrid agent: {e}")

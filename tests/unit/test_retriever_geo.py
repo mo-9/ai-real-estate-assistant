@@ -46,6 +46,34 @@ def test_retriever_sorting_handles_none_and_non_numeric(tmp_path):
     assert [d.page_content for d in sorted_docs[:2]] == ["d", "a"]
 
 
+def test_retriever_year_built_filter_skips_missing_or_non_numeric(tmp_path):
+    docs = [
+        Document(page_content="old", metadata={"year_built": 1990}),
+        Document(page_content="new", metadata={"year_built": "2010"}),
+        Document(page_content="missing", metadata={"year_built": None}),
+        Document(page_content="bad", metadata={"year_built": "n/a"}),
+    ]
+    with patch.object(ChromaPropertyStore, "_create_embeddings", return_value=None):
+        store = ChromaPropertyStore(persist_directory=str(tmp_path))
+    retr = AdvancedPropertyRetriever(vector_store=store, year_built_min=2000, year_built_max=2020)
+    filtered = retr._filter_by_year_built(docs)
+    assert [d.page_content for d in filtered] == ["new"]
+
+
+def test_retriever_energy_cert_filter_is_case_insensitive(tmp_path):
+    docs = [
+        Document(page_content="a", metadata={"energy_cert": "A"}),
+        Document(page_content="b", metadata={"energy_cert": " b "}),
+        Document(page_content="c", metadata={"energy_cert": "C"}),
+        Document(page_content="missing", metadata={"energy_cert": None}),
+    ]
+    with patch.object(ChromaPropertyStore, "_create_embeddings", return_value=None):
+        store = ChromaPropertyStore(persist_directory=str(tmp_path))
+    retr = AdvancedPropertyRetriever(vector_store=store, energy_certs=["a", "B"])
+    filtered = retr._filter_by_energy_certs(docs)
+    assert [d.page_content for d in filtered] == ["a", "b"]
+
+
 def test_advanced_retriever_filters_and_slices_to_k(tmp_path, monkeypatch):
     with patch.object(ChromaPropertyStore, "_create_embeddings", return_value=None):
         store = ChromaPropertyStore(persist_directory=str(tmp_path))

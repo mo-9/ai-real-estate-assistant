@@ -182,6 +182,9 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
     center_lat: Optional[float] = None
     center_lon: Optional[float] = None
     radius_km: Optional[float] = None
+    year_built_min: Optional[int] = None
+    year_built_max: Optional[int] = None
+    energy_certs: Optional[List[str]] = None
 
     def _get_relevant_documents(
         self,
@@ -220,6 +223,12 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
 
         if self.center_lat is not None and self.center_lon is not None and self.radius_km is not None:
             results = self._filter_by_geo(results)
+
+        if self.year_built_min is not None or self.year_built_max is not None:
+            results = self._filter_by_year_built(results)
+
+        if self.energy_certs:
+            results = self._filter_by_energy_certs(results)
 
         if self.sort_by:
             results = self._sort_results(results)
@@ -278,6 +287,38 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
             logger.warning("Could not sort results: %s", e)
             return documents
 
+    def _filter_by_year_built(self, documents: List[Document]) -> List[Document]:
+        filtered: List[Document] = []
+        for doc in documents:
+            raw_year = doc.metadata.get("year_built")
+            try:
+                year = int(raw_year) if raw_year is not None else None
+            except (TypeError, ValueError):
+                year = None
+            if year is None:
+                continue
+
+            if self.year_built_min is not None and year < int(self.year_built_min):
+                continue
+            if self.year_built_max is not None and year > int(self.year_built_max):
+                continue
+
+            filtered.append(doc)
+        return filtered
+
+    def _filter_by_energy_certs(self, documents: List[Document]) -> List[Document]:
+        allow = {str(x).strip().lower() for x in (self.energy_certs or []) if str(x).strip()}
+        if not allow:
+            return documents
+
+        filtered: List[Document] = []
+        for doc in documents:
+            raw_cert = doc.metadata.get("energy_cert")
+            cert = str(raw_cert).strip().lower() if raw_cert is not None else ""
+            if cert in allow:
+                filtered.append(doc)
+        return filtered
+
     def _filter_by_geo(self, documents: List[Document]) -> List[Document]:
         if self.center_lat is None or self.center_lon is None or self.radius_km is None:
             return []
@@ -314,6 +355,9 @@ def create_retriever(
     center_lat: Optional[float] = None,
     center_lon: Optional[float] = None,
     radius_km: Optional[float] = None,
+    year_built_min: Optional[int] = None,
+    year_built_max: Optional[int] = None,
+    energy_certs: Optional[List[str]] = None,
     forced_filters: Optional[Dict[str, Any]] = None,
     **kwargs: Any
 ) -> BaseRetriever:
@@ -336,7 +380,8 @@ def create_retriever(
     # Use advanced retriever if price filters or sorting specified
     if (
         min_price is not None or max_price is not None or sort_by is not None or
-        (center_lat is not None and center_lon is not None and radius_km is not None)
+        (center_lat is not None and center_lon is not None and radius_km is not None) or
+        year_built_min is not None or year_built_max is not None or energy_certs
     ):
         return AdvancedPropertyRetriever(
             vector_store=vector_store,
@@ -349,6 +394,9 @@ def create_retriever(
             center_lat=center_lat,
             center_lon=center_lon,
             radius_km=radius_km,
+            year_built_min=year_built_min,
+            year_built_max=year_built_max,
+            energy_certs=energy_certs,
             forced_filters=forced_filters,
             **kwargs
         )

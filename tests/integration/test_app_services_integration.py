@@ -124,6 +124,42 @@ def test_property_retriever_price_range_filters_results(tmp_path, monkeypatch):
     assert [d.page_content for d in results] == ["mid"]
 
 
+def test_property_retriever_year_built_and_energy_filters_results(tmp_path, monkeypatch):
+    with patch.object(ChromaPropertyStore, "_create_embeddings", return_value=None):
+        store = ChromaPropertyStore(persist_directory=str(tmp_path))
+
+    docs = [
+        Document(page_content="good", metadata={"year_built": 2010, "energy_cert": "B"}),
+        Document(page_content="bad_year", metadata={"year_built": 1990, "energy_cert": "B"}),
+        Document(page_content="bad_cert", metadata={"year_built": 2010, "energy_cert": "D"}),
+        Document(page_content="missing_year", metadata={"year_built": None, "energy_cert": "B"}),
+    ]
+
+    class FakeInnerRetriever:
+        def get_relevant_documents(self, query: str):
+            return docs
+
+    def fake_get_retriever(**kwargs):
+        return FakeInnerRetriever()
+
+    monkeypatch.setattr(store, "get_retriever", fake_get_retriever)
+
+    retriever = create_property_retriever(
+        vector_store=store,
+        k_results=10,
+        center_lat=None,
+        center_lon=None,
+        radius_km=None,
+        listing_type_filter=None,
+        year_built_min=2000,
+        year_built_max=2020,
+        energy_certs=["b"],
+    )
+
+    results = retriever.get_relevant_documents("apartments")
+    assert [d.page_content for d in results] == ["good"]
+
+
 def test_property_retriever_sorting_applies_after_retrieval(tmp_path, monkeypatch):
     with patch.object(ChromaPropertyStore, "_create_embeddings", return_value=None):
         store = ChromaPropertyStore(persist_directory=str(tmp_path))

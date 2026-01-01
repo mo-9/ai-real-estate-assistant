@@ -203,6 +203,19 @@ class ChromaPropertyStore:
         def _nf(x: Any) -> Optional[float]:
             return float(x) if (x is not None and not pd.isna(x)) else None
 
+        def _ni(x: Any) -> Optional[int]:
+            if x is None or pd.isna(x):
+                return None
+            try:
+                return int(float(x))
+            except (TypeError, ValueError):
+                return None
+
+        raw_energy = getattr(prop, "energy_cert", None)
+        energy_cert = str(raw_energy).strip() if raw_energy is not None else None
+        if energy_cert == "":
+            energy_cert = None
+
         metadata = {
             "id": prop.id or "unknown",
             "country": getattr(prop, "country", None),
@@ -224,6 +237,8 @@ class ChromaPropertyStore:
             "source_url": prop.source_url or "",
             "lat": _nf(getattr(prop, "latitude", None)),
             "lon": _nf(getattr(prop, "longitude", None)),
+            "year_built": _ni(getattr(prop, "year_built", None)),
+            "energy_cert": energy_cert,
         }
 
         # Add optional fields if present

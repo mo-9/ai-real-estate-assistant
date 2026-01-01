@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
@@ -13,12 +13,24 @@ from models.provider_factory import ModelProviderFactory
 from vector_store.hybrid_retriever import create_retriever
 
 
-def build_forced_filters(listing_type_filter: Optional[str]) -> Optional[Dict[str, Any]]:
+def build_forced_filters(
+    listing_type_filter: Optional[str],
+    *,
+    must_have_parking: bool = False,
+    must_have_elevator: bool = False,
+) -> Optional[Dict[str, Any]]:
+    forced: Dict[str, Any] = {}
     if listing_type_filter == "Rent":
-        return {"listing_type": "rent"}
-    if listing_type_filter == "Sale":
-        return {"listing_type": "sale"}
-    return None
+        forced["listing_type"] = "rent"
+    elif listing_type_filter == "Sale":
+        forced["listing_type"] = "sale"
+
+    if must_have_parking:
+        forced["has_parking"] = True
+    if must_have_elevator:
+        forced["has_elevator"] = True
+
+    return forced or None
 
 
 def create_llm(
@@ -52,6 +64,11 @@ def create_property_retriever(
     max_price: Optional[float] = None,
     sort_by: Optional[str] = None,
     sort_ascending: bool = True,
+    year_built_min: Optional[int] = None,
+    year_built_max: Optional[int] = None,
+    energy_certs: Optional[List[str]] = None,
+    must_have_parking: bool = False,
+    must_have_elevator: bool = False,
 ) -> BaseRetriever:
     return create_retriever(
         vector_store=vector_store,
@@ -64,7 +81,14 @@ def create_property_retriever(
         max_price=max_price,
         sort_by=sort_by,
         sort_ascending=sort_ascending,
-        forced_filters=build_forced_filters(listing_type_filter),
+        year_built_min=year_built_min,
+        year_built_max=year_built_max,
+        energy_certs=energy_certs,
+        forced_filters=build_forced_filters(
+            listing_type_filter,
+            must_have_parking=must_have_parking,
+            must_have_elevator=must_have_elevator,
+        ),
     )
 
 

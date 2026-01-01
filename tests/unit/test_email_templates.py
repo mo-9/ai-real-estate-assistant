@@ -25,13 +25,16 @@ def make_prop(pid: str, city: str, price: float, rooms: float) -> Property:
 
 def test_price_drop_template_render():
     p = make_prop("p1", "Krakow", 900, 2)
-    subject, html = PriceDropTemplate.render({
-        "property": p,
-        "old_price": 1000,
-        "new_price": 900,
-        "percent_drop": 10.0,
-        "savings": 100,
-    }, user_name="Alex")
+    subject, html = PriceDropTemplate.render(
+        {
+            "property": p,
+            "old_price": 1000,
+            "new_price": 900,
+            "percent_drop": 10.0,
+            "savings": 100,
+        },
+        user_name="Alex",
+    )
     assert "Price Drop" in subject
     assert "Krakow" in subject
     assert "You Save" in html
@@ -43,25 +46,68 @@ def test_new_property_template_render_multiple():
         make_prop("p2", "Warsaw", 1200, 3),
         make_prop("p3", "Gdansk", 800, 2),
     ]
-    subject, html = NewPropertyTemplate.render("Family Flats", props, max_display=2, user_name="Alex")
+    subject, html = NewPropertyTemplate.render(
+        "Family Flats", props, max_display=2, user_name="Alex"
+    )
     assert "New Properties" in subject
     assert "Family Flats" in subject
     assert "and 1 more" in html
 
 
 def test_digest_template_render():
-    subject, html = DigestTemplate.render("daily", {
-        "new_properties": 5,
-        "price_drops": 2,
-        "avg_price": 950,
-        "total_properties": 120,
-        "average_price": 980,
-        "trending_cities": ["Krakow", "Warsaw"],
-        "saved_searches": [{"name": "Center", "new_matches": 3}],
-    }, user_name="Alex")
+    subject, html = DigestTemplate.render(
+        "daily",
+        {
+            "new_properties": 5,
+            "price_drops": 2,
+            "avg_price": 950,
+            "total_properties": 120,
+            "average_price": 980,
+            "trending_cities": ["Krakow", "Warsaw"],
+            "saved_searches": [{"name": "Center", "new_matches": 3}],
+        },
+        user_name="Alex",
+    )
     assert "Real Estate Digest" in subject
     assert "Trending Cities" in html
     assert "Your Saved Searches" in html
+
+
+def test_digest_template_renders_top_picks_price_drops_and_expert_sections():
+    p = make_prop("p1", "Krakow", 900, 2)
+    p_dict = p.model_dump()
+    p_dict["source_url"] = "https://example.com/listing/1"
+
+    subject, html = DigestTemplate.render(
+        "weekly",
+        {
+            "new_properties": 5,
+            "price_drops": 2,
+            "avg_price": 950,
+            "total_properties": 120,
+            "average_price": 980,
+            "top_picks": [p_dict],
+            "price_drop_properties": [
+                {
+                    "property": p_dict,
+                    "old_price": 1000,
+                    "new_price": 900,
+                    "percent_drop": 10.0,
+                    "savings": 100,
+                }
+            ],
+            "expert": {
+                "city_indices": [{"city": "Krakow", "avg_price": 950}],
+                "yoy_top_up": [{"city": "Krakow", "yoy_pct": 12.5}],
+                "yoy_top_down": [{"city": "Warsaw", "yoy_pct": -4.0}],
+            },
+        },
+        user_name="Alex",
+    )
+    assert "Top Picks" in html
+    assert "Biggest Price Drops" in html
+    assert "Expert Digest" in html
+    assert "View listing" in html
 
 
 def test_test_email_template_render():
@@ -71,11 +117,13 @@ def test_test_email_template_render():
 
 
 def test_market_update_template_render():
-    subject, html = MarketUpdateTemplate.render({
-        "title": "Q4 Trends",
-        "summary": "Overview of Q4 market movements",
-        "insights": [{"icon": "•", "text": "Avg price up 3%"}],
-    }, user_name="Alex")
+    subject, html = MarketUpdateTemplate.render(
+        {
+            "title": "Q4 Trends",
+            "summary": "Overview of Q4 market movements",
+            "insights": [{"icon": "•", "text": "Avg price up 3%"}],
+        },
+        user_name="Alex",
+    )
     assert "Market Update" in subject
     assert "Key Insights" in html
-

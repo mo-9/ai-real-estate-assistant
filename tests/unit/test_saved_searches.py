@@ -26,3 +26,18 @@ def test_to_query_string_human_readable():
     assert "parking" in q and "furnished" in q
     assert "(apartment, house)" in q
 
+
+def test_matches_year_built_and_energy_cert_filters():
+    ss = SavedSearch(
+        id="s1",
+        name="Modern Efficient",
+        year_built_min=2000,
+        year_built_max=2020,
+        energy_certs=["a", "B"],
+    )
+    prop = {"year_built": "2010", "energy_cert": "b"}
+    assert ss.matches(prop) is True
+
+    assert ss.matches({**prop, "year_built": 1990}) is False
+    assert ss.matches({**prop, "energy_cert": "C"}) is False
+

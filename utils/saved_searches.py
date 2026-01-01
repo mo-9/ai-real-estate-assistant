@@ -28,9 +28,15 @@ class SavedSearch(BaseModel):
 
     # Amenity preferences
     must_have_parking: bool = False
+    must_have_elevator: bool = False
     must_have_garden: bool = False
     must_have_pool: bool = False
     must_be_furnished: bool = False
+
+    # PRO filters
+    year_built_min: Optional[int] = None
+    year_built_max: Optional[int] = None
+    energy_certs: List[str] = Field(default_factory=list)
 
     # Metadata
     created_at: datetime = Field(default_factory=datetime.now)
@@ -80,12 +86,35 @@ class SavedSearch(BaseModel):
         # Amenity filters (must have)
         if self.must_have_parking and not property_dict.get('has_parking', False):
             return False
+        if self.must_have_elevator and not property_dict.get('has_elevator', False):
+            return False
         if self.must_have_garden and not property_dict.get('has_garden', False):
             return False
         if self.must_have_pool and not property_dict.get('has_pool', False):
             return False
         if self.must_be_furnished and not property_dict.get('is_furnished', False):
             return False
+
+        raw_year = property_dict.get("year_built")
+        year_built: Optional[int]
+        try:
+            year_built = int(raw_year) if raw_year is not None else None
+        except (TypeError, ValueError):
+            year_built = None
+        if self.year_built_min is not None:
+            if year_built is None or year_built < int(self.year_built_min):
+                return False
+        if self.year_built_max is not None:
+            if year_built is None or year_built > int(self.year_built_max):
+                return False
+
+        if self.energy_certs:
+            allow = {str(x).strip().lower() for x in self.energy_certs if str(x).strip()}
+            if allow:
+                raw_cert = property_dict.get("energy_cert")
+                cert = str(raw_cert).strip().lower() if raw_cert is not None else ""
+                if cert not in allow:
+                    return False
 
         return True
 
@@ -122,6 +151,8 @@ class SavedSearch(BaseModel):
         amenities = []
         if self.must_have_parking:
             amenities.append("parking")
+        if self.must_have_elevator:
+            amenities.append("elevator")
         if self.must_have_garden:
             amenities.append("garden")
         if self.must_have_pool:
@@ -134,6 +165,17 @@ class SavedSearch(BaseModel):
 
         if self.property_types:
             parts.append(f"({', '.join(self.property_types)})")
+
+        if self.year_built_min is not None or self.year_built_max is not None:
+            if self.year_built_min is not None and self.year_built_max is not None:
+                parts.append(f"built between {int(self.year_built_min)}-{int(self.year_built_max)}")
+            elif self.year_built_min is not None:
+                parts.append(f"built after {int(self.year_built_min)}")
+            else:
+                parts.append(f"built before {int(self.year_built_max)}")
+
+        if self.energy_certs:
+            parts.append(f"energy cert: {', '.join(self.energy_certs)}")
 
         return "Find properties " + " ".join(parts) if parts else "All properties"
 

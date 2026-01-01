@@ -874,6 +874,11 @@ def create_conversation_chain():
             max_price=st.session_state.get("retr_max_price"),
             sort_by=st.session_state.get("retr_sort_by"),
             sort_ascending=st.session_state.get("retr_sort_ascending", True),
+            year_built_min=st.session_state.get("retr_year_built_min"),
+            year_built_max=st.session_state.get("retr_year_built_max"),
+            energy_certs=st.session_state.get("retr_energy_certs"),
+            must_have_parking=bool(st.session_state.get("retr_must_parking", False)),
+            must_have_elevator=bool(st.session_state.get("retr_must_elevator", False)),
         )
 
         return svc_create_conversation_chain(
@@ -916,6 +921,11 @@ def create_hybrid_agent_instance():
             max_price=st.session_state.get("retr_max_price"),
             sort_by=st.session_state.get("retr_sort_by"),
             sort_ascending=st.session_state.get("retr_sort_ascending", True),
+            year_built_min=st.session_state.get("retr_year_built_min"),
+            year_built_max=st.session_state.get("retr_year_built_max"),
+            energy_certs=st.session_state.get("retr_energy_certs"),
+            must_have_parking=bool(st.session_state.get("retr_must_parking", False)),
+            must_have_elevator=bool(st.session_state.get("retr_must_elevator", False)),
         )
 
         return svc_create_hybrid_agent_instance(
@@ -1288,13 +1298,63 @@ def render_market_insights_tab():
                 key="map_property_types",
             )
 
+            year_series = (
+                pd.to_numeric(insights.df["year_built"], errors="coerce")
+                if (len(insights.df) > 0 and "year_built" in insights.df.columns)
+                else pd.Series([], dtype="float")
+            )
+            year_values = year_series.dropna().astype(int) if len(year_series) > 0 else pd.Series([], dtype="int")
+            year_bounds = (
+                (int(year_values.min()), int(year_values.max())) if len(year_values) > 0 else None
+            )
+
+            if year_bounds:
+                year_min, year_max = year_bounds
+                y_from, y_to = st.slider(
+                    get_text("year_built_range", lang),
+                    min_value=year_min,
+                    max_value=year_max,
+                    value=(year_min, year_max),
+                    step=1,
+                    key="map_year_built_range",
+                )
+                map_year_built_min = int(y_from) if int(y_from) > year_min else None
+                map_year_built_max = int(y_to) if int(y_to) < year_max else None
+            else:
+                map_year_built_min = None
+                map_year_built_max = None
+                st.caption(get_text("no_year_built_data", lang))
+
+            energy_options = (
+                sorted(
+                    {
+                        str(x).strip()
+                        for x in insights.df["energy_cert"].dropna().tolist()
+                        if str(x).strip()
+                    }
+                )
+                if (len(insights.df) > 0 and "energy_cert" in insights.df.columns)
+                else []
+            )
+            if energy_options:
+                selected_energy_certs = st.multiselect(
+                    get_text("energy_certificates", lang),
+                    options=energy_options,
+                    default=[],
+                    key="map_energy_certs",
+                )
+                map_energy_certs = selected_energy_certs if selected_energy_certs else None
+            else:
+                map_energy_certs = None
+                st.caption(get_text("no_energy_cert_data", lang))
+
             c1, c2 = st.columns(2)
             with c1:
-                must_parking = st.checkbox("Parking", value=False, key="map_must_parking")
-                must_elevator = st.checkbox("Elevator", value=False, key="map_must_elevator")
+                must_parking = st.checkbox(get_text("parking", lang), value=False, key="map_must_parking")
+                must_elevator = st.checkbox(get_text("elevator", lang), value=False, key="map_must_elevator")
             with c2:
-                must_balcony = st.checkbox("Balcony", value=False, key="map_must_balcony")
-                must_furnished = st.checkbox("Furnished", value=False, key="map_must_furnished")
+                must_balcony = st.checkbox(get_text("balcony", lang), value=False, key="map_must_balcony")
+                must_furnished = st.checkbox(get_text("furnished", lang), value=False, key="map_must_furnished")
 
             map_max_points = st.slider(
                 "Max Points",
@@ -1316,6 +1376,46 @@ def render_market_insights_tab():
                 key="listing_type_filter",
             )
             st.caption("Chat Retrieval Filters")
+            rc1, rc2 = st.columns(2)
+            with rc1:
+                retr_must_parking = st.checkbox(
+                    get_text("parking", lang), value=False, key="retr_must_parking"
+                )
+                retr_must_elevator = st.checkbox(
+                    get_text("elevator", lang), value=False, key="retr_must_elevator"
+                )
+            with rc2:
+                pass
+
+            if year_bounds:
+                year_min, year_max = year_bounds
+                ry_from, ry_to = st.slider(
+                    get_text("year_built_range", lang),
+                    min_value=year_min,
+                    max_value=year_max,
+                    value=(year_min, year_max),
+                    step=1,
+                    key="retr_year_built_range",
+                )
+                retr_year_built_min = int(ry_from) if int(ry_from) > year_min else None
+                retr_year_built_max = int(ry_to) if int(ry_to) < year_max else None
+            else:
+                retr_year_built_min = None
+                retr_year_built_max = None
+
+            if energy_options:
+                selected_retr_energy_certs = st.multiselect(
+                    get_text("energy_certificates", lang),
+                    options=energy_options,
+                    default=[],
+                    key="retr_energy_certs",
+                )
+                retr_energy_certs = (
+                    selected_retr_energy_certs if selected_retr_energy_certs else None
+                )
+            else:
+                retr_energy_certs = None
+
             min_price = st.number_input(
                 "Min Price", min_value=0.0, value=0.0, step=100.0, key="retr_min_price_input"
             )
@@ -1342,6 +1442,11 @@ def render_market_insights_tab():
                 pmin, pmax = pmax, pmin
             st.session_state.retr_min_price = pmin
             st.session_state.retr_max_price = pmax
+            st.session_state.retr_must_parking = bool(retr_must_parking)
+            st.session_state.retr_must_elevator = bool(retr_must_elevator)
+            st.session_state.retr_year_built_min = retr_year_built_min
+            st.session_state.retr_year_built_max = retr_year_built_max
+            st.session_state.retr_energy_certs = retr_energy_certs
             sort_by_map = {
                 "Relevance": None,
                 "Price": "price",
@@ -1422,6 +1527,9 @@ def render_market_insights_tab():
                         must_have_elevator=bool(must_elevator),
                         must_have_balcony=bool(must_balcony),
                         must_be_furnished=bool(must_furnished),
+                        year_built_min=map_year_built_min,
+                        year_built_max=map_year_built_max,
+                        energy_certs=map_energy_certs,
                         require_coords=True,
                     )
 

@@ -21,59 +21,63 @@ Copyright (c) 2025 Alex Nesterovich
 GitHub: https://github.com/AleksNeStu/ai-real-estate-assistant
 """
 
-import streamlit as st
-import pandas as pd
+import logging
 import uuid
 from datetime import datetime
-import logging
 
-# Import our custom modules
-from config import settings, update_api_key
-from models.provider_factory import ModelProviderFactory, get_model_display_info
-from vector_store.chroma_store import get_vector_store
-from vector_store.reranker import create_reranker
-from data.csv_loader import DataLoaderCsv
-from data.schemas import PropertyCollection
-from streaming import StreamHandler
-from utils.ollama_detector import OllamaDetector
-from utils.api_key_validator import APIKeyValidator
-from ai.app_services import (
-    create_llm as svc_create_llm,
-    create_property_retriever as svc_create_property_retriever,
-    create_conversation_chain as svc_create_conversation_chain,
-    create_hybrid_agent_instance as svc_create_hybrid_agent_instance,
-)
+import pandas as pd
+import streamlit as st
+from streamlit_folium import st_folium
 
 # Phase 2 imports
 from agents.query_analyzer import analyze_query
 from agents.recommendation_engine import create_recommendation_engine
+from ai.app_services import create_conversation_chain as svc_create_conversation_chain
+from ai.app_services import create_hybrid_agent_instance as svc_create_hybrid_agent_instance
+from ai.app_services import create_llm as svc_create_llm
+from ai.app_services import create_property_retriever as svc_create_property_retriever
 
 # Phase 3 imports
-from analytics import MarketInsights, SessionTracker, EventType
-from utils import (
-    PropertyExporter, ExportFormat, SavedSearchManager, InsightsExporter,
-    load_and_inject_styles, inject_enhanced_form_styles, inject_tailwind_cdn
-)
-from ui.comparison_viz import display_comparison_ui
-from ui.geo_viz import _get_city_coordinates
-from streamlit_folium import st_folium
+from analytics import EventType, MarketInsights, SessionTracker
+
+# Import our custom modules
+from config import settings, update_api_key
+from data.csv_loader import DataLoaderCsv
+from data.schemas import PropertyCollection
+
+# Internationalization
+from i18n import get_available_languages, get_text
+from models.provider_factory import ModelProviderFactory, get_model_display_info
 
 # Phase 5 imports
 from notifications import (
-    EmailService,
-    EmailConfig,
-    EmailProvider,
-    EmailServiceFactory,
-    NotificationPreferencesManager,
     AlertFrequency,
     DigestDay,
+    EmailConfig,
+    EmailProvider,
+    EmailService,
+    EmailServiceFactory,
     NotificationHistory,
-    TestEmailTemplate
+    NotificationPreferencesManager,
+    TestEmailTemplate,
 )
 from notifications.notification_preferences import DigestScheduler
-
-# Internationalization
-from i18n import get_text, get_available_languages
+from streaming import StreamHandler
+from ui.comparison_viz import display_comparison_ui
+from ui.geo_viz import _get_city_coordinates
+from utils import (
+    ExportFormat,
+    InsightsExporter,
+    PropertyExporter,
+    SavedSearchManager,
+    inject_enhanced_form_styles,
+    inject_tailwind_cdn,
+    load_and_inject_styles,
+)
+from utils.api_key_validator import APIKeyValidator
+from utils.ollama_detector import OllamaDetector
+from vector_store.chroma_store import get_vector_store
+from vector_store.reranker import create_reranker
 
 # LangChain imports
 
@@ -91,6 +95,7 @@ st.set_page_config(
 load_and_inject_styles()
 inject_enhanced_form_styles()
 inject_tailwind_cdn()
+
 
 @st.cache_resource
 def get_digest_scheduler():
@@ -113,6 +118,7 @@ def initialize_session_state():
     if "property_collection" not in st.session_state:
         try:
             from utils.property_cache import load_collection
+
             cached = load_collection()
         except Exception:
             cached = None
@@ -224,12 +230,12 @@ def render_sidebar():
         with st.expander("⚙️ Preferences", expanded=True):
             languages = get_available_languages()
             selected_lang = st.selectbox(
-                get_text('language', lang),
+                get_text("language", lang),
                 options=list(languages.keys()),
                 format_func=lambda x: languages[x],
                 index=list(languages.keys()).index(st.session_state.language),
                 key="language_selector",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
             )
             if selected_lang != st.session_state.language:
                 st.session_state.language = selected_lang
@@ -265,7 +271,7 @@ def render_sidebar():
                 options=providers,
                 format_func=lambda x: provider_display.get(x, x),
                 index=default_provider_index,
-                key="provider_select"
+                key="provider_select",
             )
 
             st.session_state.selected_provider = selected_provider
@@ -280,22 +286,26 @@ def render_sidebar():
                     ollama_status = OllamaDetector.get_status()
 
                     if ollama_status.is_installed:
-                        st.success(get_text('ollama_installed', lang))
+                        st.success(get_text("ollama_installed", lang))
                         if ollama_status.version:
-                            st.write(f"**{get_text('ollama_version', lang)}:** {ollama_status.version}")
+                            st.write(
+                                f"**{get_text('ollama_version', lang)}:** {ollama_status.version}"
+                            )
 
                         if ollama_status.is_running:
-                            st.success(get_text('ollama_running', lang))
+                            st.success(get_text("ollama_running", lang))
                             if ollama_status.available_models:
-                                st.write(f"**{get_text('ollama_models_available', lang)}:** {len(ollama_status.available_models)}")
+                                st.write(
+                                    f"**{get_text('ollama_models_available', lang)}:** {len(ollama_status.available_models)}"
+                                )
                                 if len(ollama_status.available_models) <= 10:
                                     st.write(", ".join(ollama_status.available_models))
                         else:
-                            st.warning(get_text('ollama_not_running', lang))
+                            st.warning(get_text("ollama_not_running", lang))
                             st.code(f"{get_text('ollama_start_service', lang)}: ollama serve")
                     else:
-                        st.error(get_text('ollama_not_installed', lang))
-                        st.info(get_text('ollama_install_instructions', lang))
+                        st.error(get_text("ollama_not_installed", lang))
+                        st.info(get_text("ollama_install_instructions", lang))
 
                         # Get OS-specific installation instructions
                         os_type = OllamaDetector.get_os_type()
@@ -304,23 +314,27 @@ def render_sidebar():
                         st.markdown(f"### {instructions.get('title', 'Installation')}")
 
                         # Method 1 (Recommended)
-                        method_1 = instructions.get('method_1', {})
+                        method_1 = instructions.get("method_1", {})
                         if method_1:
                             st.markdown(f"**{method_1.get('name', 'Method 1')}:**")
-                            for step in method_1.get('steps', []):
+                            for step in method_1.get("steps", []):
                                 st.write(f"- {step}")
-                            if 'url' in method_1:
-                                st.link_button(get_text('ollama_download', lang), method_1['url'])
-                            if 'command' in method_1:
-                                st.code(method_1['command'], language='bash')
+                            if "url" in method_1:
+                                st.link_button(get_text("ollama_download", lang), method_1["url"])
+                            if "command" in method_1:
+                                st.code(method_1["command"], language="bash")
 
                         # Show recommended models
                         st.markdown(f"**{get_text('ollama_recommended_models', lang)}:**")
                         recommended_models = OllamaDetector.get_recommended_models()
                         for model in recommended_models:
-                            if model.get('recommended', False):
-                                st.write(f"- `{model['name']}` - {model['description']} ({model['size']}, RAM: {model['ram']})")
-                                st.code(f"{get_text('ollama_pull_model', lang)}: {model['command']}")
+                            if model.get("recommended", False):
+                                st.write(
+                                    f"- `{model['name']}` - {model['description']} ({model['size']}, RAM: {model['ram']})"
+                                )
+                                st.code(
+                                    f"{get_text('ollama_pull_model', lang)}: {model['command']}"
+                                )
 
             # API Key Management for remote providers
             elif provider.requires_api_key:
@@ -343,14 +357,23 @@ def render_sidebar():
                         # Show key status
                         col1, col2, col3 = st.columns([2, 1, 1])
                         with col1:
-                            st.success(f"✓ {provider.display_name} {get_text('api_key_configured', lang)}")
+                            st.success(
+                                f"✓ {provider.display_name} {get_text('api_key_configured', lang)}"
+                            )
                         with col2:
-                            if st.button(get_text('validate_api_key', lang), key=f"validate_{selected_provider}"):
-                                with st.spinner(get_text('validating_key', lang)):
-                                    result = APIKeyValidator.validate_key(selected_provider, api_key_env)
+                            if st.button(
+                                get_text("validate_api_key", lang),
+                                key=f"validate_{selected_provider}",
+                            ):
+                                with st.spinner(get_text("validating_key", lang)):
+                                    result = APIKeyValidator.validate_key(
+                                        selected_provider, api_key_env
+                                    )
                                     st.session_state[f"{selected_provider}_key_status"] = result
                         with col3:
-                            if st.button(get_text('change_api_key', lang), key=f"change_{selected_provider}"):
+                            if st.button(
+                                get_text("change_api_key", lang), key=f"change_{selected_provider}"
+                            ):
                                 st.session_state[f"{selected_provider}_show_change"] = True
 
                         # Show validation result
@@ -361,7 +384,9 @@ def render_sidebar():
                             else:
                                 st.error(f"{get_text('key_invalid', lang)}: {result.message}")
                                 if result.error_details:
-                                    show_details = st.checkbox("Error Details", key=f"err_details_{selected_provider}")
+                                    show_details = st.checkbox(
+                                        "Error Details", key=f"err_details_{selected_provider}"
+                                    )
                                     if show_details:
                                         st.code(result.error_details)
 
@@ -371,58 +396,85 @@ def render_sidebar():
                             new_key = st.text_input(
                                 f"New {provider.display_name} API Key",
                                 type="password",
-                                key=f"new_key_{selected_provider}"
+                                key=f"new_key_{selected_provider}",
                             )
                             col1, col2 = st.columns(2)
                             with col1:
-                                if st.button(get_text('save_api_key', lang), key=f"save_{selected_provider}"):
+                                if st.button(
+                                    get_text("save_api_key", lang), key=f"save_{selected_provider}"
+                                ):
                                     if new_key:
                                         # Validate before saving
-                                        with st.spinner(get_text('validating_key', lang)):
-                                            result = APIKeyValidator.validate_key(selected_provider, new_key)
+                                        with st.spinner(get_text("validating_key", lang)):
+                                            result = APIKeyValidator.validate_key(
+                                                selected_provider, new_key
+                                            )
                                             if result.is_valid:
                                                 update_api_key(selected_provider, new_key)
                                                 ModelProviderFactory.clear_cache()
-                                                st.success(get_text('api_key_saved', lang))
-                                                st.session_state[f"{selected_provider}_show_change"] = False
-                                                st.session_state[f"{selected_provider}_key_status"] = result
+                                                st.success(get_text("api_key_saved", lang))
+                                                st.session_state[
+                                                    f"{selected_provider}_show_change"
+                                                ] = False
+                                                st.session_state[
+                                                    f"{selected_provider}_key_status"
+                                                ] = result
                                                 st.rerun()
                                             else:
-                                                st.error(f"{get_text('api_key_validation_failed', lang)}: {result.message}")
+                                                st.error(
+                                                    f"{get_text('api_key_validation_failed', lang)}: {result.message}"
+                                                )
                                     else:
-                                        st.warning(get_text('enter_new_api_key', lang))
+                                        st.warning(get_text("enter_new_api_key", lang))
                             with col2:
-                                if st.button(get_text('cancel', lang), key=f"cancel_{selected_provider}"):
+                                if st.button(
+                                    get_text("cancel", lang), key=f"cancel_{selected_provider}"
+                                ):
                                     st.session_state[f"{selected_provider}_show_change"] = False
                                     st.rerun()
                     else:
                         # No API key set - show input
-                        st.warning(f"{get_text('api_key_required', lang).format(provider=provider.display_name)}")
+                        st.warning(
+                            f"{get_text('api_key_required', lang).format(provider=provider.display_name)}"
+                        )
                         api_key = st.text_input(
                             f"{provider.display_name} API Key",
                             type="password",
                             help=f"Enter your {provider.display_name} API key",
-                            key=f"input_{selected_provider}"
+                            key=f"input_{selected_provider}",
                         )
-                        if st.button(get_text('save_api_key', lang), key=f"save_new_{selected_provider}"):
+                        if st.button(
+                            get_text("save_api_key", lang), key=f"save_new_{selected_provider}"
+                        ):
                             if api_key:
                                 # Validate before saving
-                                with st.spinner(get_text('validating_key', lang)):
-                                    result = APIKeyValidator.validate_key(selected_provider, api_key)
+                                with st.spinner(get_text("validating_key", lang)):
+                                    result = APIKeyValidator.validate_key(
+                                        selected_provider, api_key
+                                    )
                                     if result.is_valid:
                                         update_api_key(selected_provider, api_key)
                                         ModelProviderFactory.clear_cache()
-                                        st.success(get_text('api_key_saved', lang))
+                                        st.success(get_text("api_key_saved", lang))
                                         st.session_state[f"{selected_provider}_key_status"] = result
                                         st.rerun()
                                     else:
-                                        st.error(f"{get_text('api_key_validation_failed', lang)}: {result.message}")
+                                        st.error(
+                                            f"{get_text('api_key_validation_failed', lang)}: {result.message}"
+                                        )
                                         if result.error_details:
-                                            show_details_new = st.checkbox("Error Details", key=f"err_details_new_{selected_provider}")
+                                            show_details_new = st.checkbox(
+                                                "Error Details",
+                                                key=f"err_details_new_{selected_provider}",
+                                            )
                                             if show_details_new:
                                                 st.code(result.error_details)
                             else:
-                                st.warning(get_text('enter_api_key', lang).format(provider=provider.display_name))
+                                st.warning(
+                                    get_text("enter_api_key", lang).format(
+                                        provider=provider.display_name
+                                    )
+                                )
             else:
                 # Local provider - no API key needed
                 st.info(f"ℹ️ {get_text('no_api_key_needed', lang)}")
@@ -432,10 +484,10 @@ def render_sidebar():
             model_options = {m.id: m for m in models}
 
             selected_model_id = st.selectbox(
-                get_text('model', lang),
+                get_text("model", lang),
                 options=list(model_options.keys()),
                 format_func=lambda x: model_options[x].display_name,
-                key="model_select"
+                key="model_select",
             )
 
             st.session_state.selected_model = selected_model_id
@@ -447,64 +499,64 @@ def render_sidebar():
                 info = get_model_display_info(model_info)
                 st.write(f"**{get_text('context', lang)}:** {info['context']}")
                 st.write(f"**{get_text('cost', lang)}:** {info['cost']}")
-                if 'description' in info:
+                if "description" in info:
                     st.write(f"**{get_text('description', lang)}:** {info['description']}")
-                if 'recommended_for' in info:
-                    st.write(f"**{get_text('best_for', lang)}:**", ", ".join(info['recommended_for']))
-
-            
+                if "recommended_for" in info:
+                    st.write(
+                        f"**{get_text('best_for', lang)}:**", ", ".join(info["recommended_for"])
+                    )
 
         # Advanced settings (collapsible)
         with st.expander(f"⚙️ {get_text('advanced_settings', lang)}"):
             temperature = st.slider(
-                get_text('temperature', lang),
+                get_text("temperature", lang),
                 min_value=0.0,
                 max_value=2.0,
                 value=settings.default_temperature,
                 step=0.1,
-                help=get_text('controls_randomness', lang)
+                help=get_text("controls_randomness", lang),
             )
             st.session_state.temperature = temperature
 
             max_tokens = st.number_input(
-                get_text('max_tokens', lang),
+                get_text("max_tokens", lang),
                 min_value=256,
                 max_value=32000,
                 value=settings.default_max_tokens,
                 step=256,
-                help=get_text('maximum_response_length', lang)
+                help=get_text("maximum_response_length", lang),
             )
             st.session_state.max_tokens = max_tokens
 
             k_results = st.slider(
-                get_text('results_to_retrieve', lang),
+                get_text("results_to_retrieve", lang),
                 min_value=1,
                 max_value=20,
                 value=settings.default_k_results,
-                help=get_text('num_properties_search', lang)
+                help=get_text("num_properties_search", lang),
             )
             st.session_state.k_results = k_results
 
         # Intelligence features (collapsible)
-        with st.expander(get_text('intelligence_features', lang)):
+        with st.expander(get_text("intelligence_features", lang)):
             use_hybrid_agent = st.checkbox(
-                get_text('use_hybrid_agent', lang),
+                get_text("use_hybrid_agent", lang),
                 value=st.session_state.use_hybrid_agent,
-                help=get_text('enable_intelligent_routing', lang)
+                help=get_text("enable_intelligent_routing", lang),
             )
             st.session_state.use_hybrid_agent = use_hybrid_agent
 
             show_query_analysis = st.checkbox(
-                get_text('show_query_analysis', lang),
+                get_text("show_query_analysis", lang),
                 value=st.session_state.show_query_analysis,
-                help=get_text('display_query_intent', lang)
+                help=get_text("display_query_intent", lang),
             )
             st.session_state.show_query_analysis = show_query_analysis
 
             use_reranking = st.checkbox(
-                get_text('use_reranking', lang),
+                get_text("use_reranking", lang),
                 value=st.session_state.use_reranking,
-                help=get_text('rerank_better_relevance', lang)
+                help=get_text("rerank_better_relevance", lang),
             )
             st.session_state.use_reranking = use_reranking
 
@@ -517,54 +569,60 @@ def render_sidebar():
         with st.expander(f"📊 {get_text('data_sources', lang)}"):
             autoload_flag = st.checkbox(
                 "autoload_default_at_seton_start",
-                value=st.session_state.get("autoload_default_datasets", settings.autoload_default_datasets)
+                value=st.session_state.get(
+                    "autoload_default_datasets", settings.autoload_default_datasets
+                ),
             )
             st.session_state.autoload_default_datasets = autoload_flag
 
             data_source_tab = st.radio(
-                get_text('data_source', lang),
-                options=["URL", get_text('local_files', lang)],
-                horizontal=True
+                get_text("data_source", lang),
+                options=["URL", get_text("local_files", lang)],
+                horizontal=True,
             )
 
             if data_source_tab == "URL":
                 csv_urls = st.text_area(
-                    get_text('csv_urls', lang),
+                    get_text("csv_urls", lang),
                     value="\n".join(settings.default_datasets),
-                    placeholder=get_text('csv_urls_placeholder', lang),
-                    help=get_text('csv_urls_help', lang),
-                    height=100
+                    placeholder=get_text("csv_urls_placeholder", lang),
+                    help=get_text("csv_urls_help", lang),
+                    height=100,
                 )
 
-                if st.button(get_text('load_data', lang), type="primary"):
+                if st.button(get_text("load_data", lang), type="primary"):
                     if csv_urls:
                         load_data_from_urls(csv_urls)
                     else:
-                        st.warning(get_text('please_enter_csv_url', lang))
+                        st.warning(get_text("please_enter_csv_url", lang))
 
             else:
-                st.write(get_text('upload_csv_files', lang))
+                st.write(get_text("upload_csv_files", lang))
                 uploaded_files = st.file_uploader(
                     "Choose CSV or Excel files",
-                    type=['csv', 'xlsx', 'xls'],
+                    type=["csv", "xlsx", "xls"],
                     accept_multiple_files=True,
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
                 )
 
-                if st.button(get_text('load_local_files', lang), type="primary"):
+                if st.button(get_text("load_local_files", lang), type="primary"):
                     if uploaded_files:
                         load_local_files(uploaded_files)
                     else:
-                        st.warning(get_text('please_upload_files', lang))
+                        st.warning(get_text("please_upload_files", lang))
 
             # Data status
             if st.session_state.data_loaded:
-                st.success(f"✓ {get_text('data_loaded_success', lang)}: {len(st.session_state.property_collection.properties)} {get_text('properties', lang)}")
+                st.success(
+                    f"✓ {get_text('data_loaded_success', lang)}: {len(st.session_state.property_collection.properties)} {get_text('properties', lang)}"
+                )
 
                 # Vector store stats
                 if st.session_state.vector_store:
                     stats = st.session_state.vector_store.get_stats()
-                    st.info(f"📦 {get_text('vector_store', lang)}: {stats.get('total_documents', 0)} {get_text('documents', lang)}")
+                    st.info(
+                        f"📦 {get_text('vector_store', lang)}: {stats.get('total_documents', 0)} {get_text('documents', lang)}"
+                    )
 
         st.divider()
 
@@ -572,13 +630,13 @@ def render_sidebar():
         with st.expander(f"🔄 {get_text('session', lang)}"):
             col1, col2 = st.columns(2)
             with col1:
-                if st.button(get_text('clear_chat', lang), use_container_width=True):
+                if st.button(get_text("clear_chat", lang), use_container_width=True):
                     st.session_state.messages = []
                     st.session_state.conversation_chain = None
                     st.rerun()
 
             with col2:
-                if st.button(get_text('reset_all', lang), use_container_width=True):
+                if st.button(get_text("reset_all", lang), use_container_width=True):
                     for key in list(st.session_state.keys()):
                         del st.session_state[key]
                     st.rerun()
@@ -589,17 +647,17 @@ def load_data_from_urls(urls_text: str):
     lang = st.session_state.language
 
     # Parse URLs (one per line)
-    urls = [url.strip() for url in urls_text.strip().split('\n') if url.strip()]
+    urls = [url.strip() for url in urls_text.strip().split("\n") if url.strip()]
 
     if not urls:
-        st.warning(get_text('please_enter_csv_url', lang))
+        st.warning(get_text("please_enter_csv_url", lang))
         return
 
     all_properties = []
     success_count = 0
     failed_urls = []
 
-    with st.spinner(get_text('loading_data_url', lang)):
+    with st.spinner(get_text("loading_data_url", lang)):
         for i, url in enumerate(urls, 1):
             try:
                 st.info(f"{get_text('url_processing', lang)} {i}/{len(urls)}: {url[:80]}...")
@@ -619,14 +677,13 @@ def load_data_from_urls(urls_text: str):
                 st.info(f"✨ Formatted {len(df_formatted)} properties")
 
                 # Convert to PropertyCollection
-                collection_part = PropertyCollection.from_dataframe(
-                    df_formatted,
-                    source=url
-                )
+                collection_part = PropertyCollection.from_dataframe(df_formatted, source=url)
 
                 all_properties.extend(collection_part.properties)
                 success_count += 1
-                st.success(f"✓ {get_text('url_success', lang)}: {len(collection_part.properties)} {get_text('properties', lang)}")
+                st.success(
+                    f"✓ {get_text('url_success', lang)}: {len(collection_part.properties)} {get_text('properties', lang)}"
+                )
 
             except Exception as e:
                 failed_urls.append((url, str(e)))
@@ -650,12 +707,12 @@ def load_data_from_urls(urls_text: str):
 
         merged_list = list(merged_map.values())
         combined_collection = PropertyCollection(
-            properties=merged_list,
-            total_count=len(merged_list)
+            properties=merged_list, total_count=len(merged_list)
         )
         st.session_state.property_collection = combined_collection
         try:
             from utils.property_cache import save_collection
+
             save_collection(combined_collection)
         except Exception:
             pass
@@ -665,7 +722,9 @@ def load_data_from_urls(urls_text: str):
         # Create market insights (Phase 3)
         st.session_state.market_insights = MarketInsights(combined_collection)
 
-        st.success(f"✓ {get_text('data_loaded_success', lang)}: {len(combined_collection.properties)} {get_text('properties', lang)} from {success_count}/{len(urls)} URLs!")
+        st.success(
+            f"✓ {get_text('data_loaded_success', lang)}: {len(combined_collection.properties)} {get_text('properties', lang)} from {success_count}/{len(urls)} URLs!"
+        )
         st.session_state.data_loaded = True
 
         # Show failed URLs summary if any
@@ -688,7 +747,7 @@ def load_local_files(uploaded_files):
     lang = st.session_state.language
 
     try:
-        with st.spinner(get_text('loading_local_files', lang)):
+        with st.spinner(get_text("loading_local_files", lang)):
             all_properties = []
 
             import pandas as pd
@@ -714,8 +773,7 @@ def load_local_files(uploaded_files):
 
                 # Convert to PropertyCollection
                 collection_part = PropertyCollection.from_dataframe(
-                    df_formatted,
-                    source=uploaded_file.name
+                    df_formatted, source=uploaded_file.name
                 )
 
                 all_properties.extend(collection_part.properties)
@@ -734,12 +792,12 @@ def load_local_files(uploaded_files):
 
                 merged_list = list(merged_map.values())
                 combined_collection = PropertyCollection(
-                    properties=merged_list,
-                    total_count=len(merged_list)
+                    properties=merged_list, total_count=len(merged_list)
                 )
                 st.session_state.property_collection = combined_collection
                 try:
                     from utils.property_cache import save_collection
+
                     save_collection(combined_collection)
                 except Exception:
                     pass
@@ -749,7 +807,9 @@ def load_local_files(uploaded_files):
                 # Create market insights (Phase 3)
                 st.session_state.market_insights = MarketInsights(combined_collection)
 
-                st.success(f"✓ {get_text('data_loaded_success', lang)}: {len(combined_collection.properties)} {get_text('properties', lang)}!")
+                st.success(
+                    f"✓ {get_text('data_loaded_success', lang)}: {len(combined_collection.properties)} {get_text('properties', lang)}!"
+                )
                 st.session_state.data_loaded = True
             else:
                 st.warning(f"{get_text('no_data', lang)}")
@@ -774,10 +834,7 @@ def load_into_vector_store(collection: PropertyCollection):
 
         # Add properties
         vector_store = st.session_state.vector_store
-        added = vector_store.add_property_collection(
-            collection,
-            replace_existing=False
-        )
+        added = vector_store.add_property_collection(collection, replace_existing=False)
 
         logger.info("Added %s properties to vector store", added)
 
@@ -878,38 +935,44 @@ def render_chat_tab():
 
     # Check if data is loaded
     if not st.session_state.data_loaded:
-        st.info(get_text('please_load_data', lang))
+        st.info(get_text("please_load_data", lang))
 
         # Show feature highlights
-        st.subheader(get_text('features_title', lang))
+        st.subheader(get_text("features_title", lang))
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             **{get_text('chat_tab_features', lang)}**
             - {get_text('chat_feature_1', lang)}
             - {get_text('chat_feature_2', lang)}
             - {get_text('chat_feature_3', lang)}
             - {get_text('chat_feature_4', lang)}
-            """)
+            """
+            )
 
         with col2:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             **{get_text('compare_tab_features', lang)}**
             - {get_text('compare_feature_1', lang)}
             - {get_text('compare_feature_2', lang)}
             - {get_text('compare_feature_3', lang)}
             - {get_text('compare_feature_4', lang)}
-            """)
+            """
+            )
 
         with col3:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             **{get_text('export_tab_features', lang)}**
             - {get_text('export_feature_1', lang)}
             - {get_text('export_feature_2', lang)}
             - {get_text('export_feature_3', lang)}
             - {get_text('export_feature_4', lang)}
-            """)
+            """
+            )
 
         return
 
@@ -930,6 +993,7 @@ def render_chat_tab():
     if prompt := st.chat_input("Ask about properties..."):
         # Track query start time (Phase 3)
         import time
+
         query_start = time.time()
 
         # Add user message
@@ -964,14 +1028,13 @@ def render_chat_tab():
                             st.session_state.hybrid_agent = create_hybrid_agent_instance()
 
                     if st.session_state.hybrid_agent is None:
-                        st.error(get_text('failed_create_agent', lang))
+                        st.error(get_text("failed_create_agent", lang))
                         return
 
                     # Get response from hybrid agent
                     with st.spinner("🧠 Analyzing query and processing..."):
                         response = st.session_state.hybrid_agent.process_query(
-                            query=prompt,
-                            return_analysis=True
+                            query=prompt, return_analysis=True
                         )
 
                     answer = response["answer"]
@@ -994,14 +1057,12 @@ def render_chat_tab():
                             st.session_state.conversation_chain = create_conversation_chain()
 
                     if st.session_state.conversation_chain is None:
-                        st.error(get_text('failed_create_chain', lang))
+                        st.error(get_text("failed_create_chain", lang))
                         return
 
                     # Get response
                     with st.spinner("Thinking..."):
-                        response = st.session_state.conversation_chain({
-                            "question": prompt
-                        })
+                        response = st.session_state.conversation_chain({"question": prompt})
 
                     answer = response["answer"]
                     source_docs = response.get("source_documents", [])
@@ -1010,9 +1071,7 @@ def render_chat_tab():
                 if st.session_state.use_reranking and source_docs:
                     reranker = create_reranker(advanced=True)
                     reranked = reranker.rerank(
-                        query=prompt,
-                        documents=source_docs,
-                        k=min(5, len(source_docs))
+                        query=prompt, documents=source_docs, k=min(5, len(source_docs))
                     )
                     source_docs = [doc for doc, score in reranked]
                     st.caption("✨ Results reranked for relevance")
@@ -1027,15 +1086,13 @@ def render_chat_tab():
                     query=prompt,
                     intent=intent_val,
                     complexity="medium",
-                    processing_time_ms=processing_time_ms
+                    processing_time_ms=processing_time_ms,
                 )
 
                 # Save to history
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": answer,
-                    "sources": source_docs
-                })
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": answer, "sources": source_docs}
+                )
 
                 # Display sources
                 if source_docs:
@@ -1052,8 +1109,7 @@ def render_chat_tab():
 
                 # Track error (Phase 3)
                 st.session_state.session_tracker.track_error(
-                    error_type=type(e).__name__,
-                    error_message=str(e)
+                    error_type=type(e).__name__, error_message=str(e)
                 )
 
 
@@ -1062,7 +1118,7 @@ def render_market_insights_tab():
     lang = st.session_state.language
 
     if not st.session_state.data_loaded or st.session_state.market_insights is None:
-        st.info(get_text('please_load_data_insights', lang))
+        st.info(get_text("please_load_data_insights", lang))
         return
 
     st.header(f"📈 {get_text('market_insights_analytics', lang)}")
@@ -1072,17 +1128,17 @@ def render_market_insights_tab():
     # Overall statistics
     stats = insights.get_overall_statistics()
 
-    st.subheader(get_text('market_overview', lang))
+    st.subheader(get_text("market_overview", lang))
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric(get_text('total_properties', lang), stats.total_properties)
+        st.metric(get_text("total_properties", lang), stats.total_properties)
     with col2:
-        st.metric(get_text('average_price', lang), f"${stats.average_price:.2f}")
+        st.metric(get_text("average_price", lang), f"${stats.average_price:.2f}")
     with col3:
-        st.metric(get_text('median_price', lang), f"${stats.median_price:.2f}")
+        st.metric(get_text("median_price", lang), f"${stats.median_price:.2f}")
     with col4:
-        st.metric(get_text('avg_rooms', lang), f"{stats.avg_rooms:.1f}")
+        st.metric(get_text("avg_rooms", lang), f"{stats.avg_rooms:.1f}")
 
     st.divider()
 
@@ -1090,41 +1146,40 @@ def render_market_insights_tab():
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader(get_text('price_trend', lang))
+        st.subheader(get_text("price_trend", lang))
         trend = insights.get_price_trend()
         trend_emoji = {
             "increasing": "📈",
             "decreasing": "📉",
             "stable": "➡️",
-            "insufficient_data": "❓"
+            "insufficient_data": "❓",
         }.get(trend.direction.value, "")
 
         st.metric(
-            get_text('market_direction', lang),
+            get_text("market_direction", lang),
             f"{trend_emoji} {trend.direction.value.title()}",
-            f"{trend.change_percent:+.1f}%"
+            f"{trend.change_percent:+.1f}%",
         )
         st.caption(f"{get_text('confidence_high', lang).split(':')[0]}: {trend.confidence.title()}")
-        st.caption(f"{get_text('sample_size', lang)}: {trend.sample_size} {get_text('properties', lang).lower()}")
+        st.caption(
+            f"{get_text('sample_size', lang)}: {trend.sample_size} {get_text('properties', lang).lower()}"
+        )
 
     with col2:
-        st.subheader(get_text('price_distribution', lang))
+        st.subheader(get_text("price_distribution", lang))
         price_dist = insights.get_price_distribution(bins=8)
-        dist_df = pd.DataFrame({
-            'Price Range': price_dist['bins'],
-            'Count': price_dist['counts']
-        })
+        dist_df = pd.DataFrame({"Price Range": price_dist["bins"], "Count": price_dist["counts"]})
         try:
-            import pyarrow as pa  # noqa: F401
-            st.bar_chart(dist_df.set_index('Price Range'))
+            st.bar_chart(dist_df.set_index("Price Range"))
         except Exception:
             try:
                 import matplotlib.pyplot as plt
+
                 fig, ax = plt.subplots()
-                s = dist_df.set_index('Price Range')['Count']
-                s.plot(kind='bar', ax=ax)
-                ax.set_xlabel('Price Range')
-                ax.set_ylabel('Count')
+                s = dist_df.set_index("Price Range")["Count"]
+                s.plot(kind="bar", ax=ax)
+                ax.set_xlabel("Price Range")
+                ax.set_ylabel("Count")
                 st.pyplot(fig)
             except Exception:
                 st.dataframe(dist_df)
@@ -1132,38 +1187,50 @@ def render_market_insights_tab():
     st.divider()
 
     # Location insights
-    st.subheader(get_text('location_analysis', lang))
+    st.subheader(get_text("location_analysis", lang))
 
     cities = list(stats.cities.keys())
     if len(cities) >= 2:
         col1, col2 = st.columns(2)
 
         with col1:
-            selected_city = st.selectbox(get_text('select_city', lang), cities)
+            selected_city = st.selectbox(get_text("select_city", lang), cities)
             if selected_city:
                 city_insights = insights.get_location_insights(selected_city)
                 if city_insights:
                     st.write(f"**{city_insights.city}**")
                     st.write(f"{get_text('properties', lang)}: {city_insights.property_count}")
-                    st.write(f"{get_text('average_price', lang).split()[0]}: ${city_insights.avg_price:.2f}")
+                    st.write(
+                        f"{get_text('average_price', lang).split()[0]}: ${city_insights.avg_price:.2f}"
+                    )
                     st.write(f"{get_text('median_price', lang)}: ${city_insights.median_price:.2f}")
                     if city_insights.avg_price_per_sqm:
                         st.write(f"Price/sqm: ${city_insights.avg_price_per_sqm:.2f}")
-                    st.write(f"{get_text('market_position', lang)} {city_insights.price_comparison.replace('_', ' ').title()}")
+                    st.write(
+                        f"{get_text('market_position', lang)} {city_insights.price_comparison.replace('_', ' ').title()}"
+                    )
 
         with col2:
             if len(cities) >= 2:
                 st.write(f"**{get_text('city_comparison', lang)}**")
-                compare_city1 = st.selectbox(get_text('compare_city_1', lang), cities, key="compare1")
-                compare_city2 = st.selectbox(get_text('compare_city_2', lang), [c for c in cities if c != compare_city1], key="compare2")
+                compare_city1 = st.selectbox(
+                    get_text("compare_city_1", lang), cities, key="compare1"
+                )
+                compare_city2 = st.selectbox(
+                    get_text("compare_city_2", lang),
+                    [c for c in cities if c != compare_city1],
+                    key="compare2",
+                )
 
                 if compare_city1 and compare_city2:
                     comparison = insights.compare_locations(compare_city1, compare_city2)
-                    if 'error' not in comparison:
-                        cheaper = comparison['cheaper_city']
-                        diff = abs(comparison['price_difference'])
-                        diff_pct = abs(comparison['price_difference_percent'])
-                        st.write(f"{cheaper} {get_text('is_cheaper_by', lang)} ${diff:,.0f} ({diff_pct:.1f}%)")
+                    if "error" not in comparison:
+                        cheaper = comparison["cheaper_city"]
+                        diff = abs(comparison["price_difference"])
+                        diff_pct = abs(comparison["price_difference_percent"])
+                        st.write(
+                            f"{cheaper} {get_text('is_cheaper_by', lang)} ${diff:,.0f} ({diff_pct:.1f}%)"
+                        )
 
     st.divider()
 
@@ -1209,7 +1276,11 @@ def render_market_insights_tab():
                 key="map_rooms_range",
             )
 
-            map_type_options = sorted([str(x) for x in insights.df["property_type"].dropna().unique().tolist()]) if len(insights.df) > 0 else []
+            map_type_options = (
+                sorted([str(x) for x in insights.df["property_type"].dropna().unique().tolist()])
+                if len(insights.df) > 0
+                else []
+            )
             map_property_types = st.multiselect(
                 "Property Type",
                 options=map_type_options,
@@ -1235,11 +1306,22 @@ def render_market_insights_tab():
             )
 
             st.caption("City Price Indices")
-            selected_cities = st.multiselect("Cities", options=cities, default=cities[:3] if len(cities) >= 3 else cities)
-            st.radio("Listing Type", options=["Any","Rent","Sale"], horizontal=True, key="listing_type_filter")
+            selected_cities = st.multiselect(
+                "Cities", options=cities, default=cities[:3] if len(cities) >= 3 else cities
+            )
+            st.radio(
+                "Listing Type",
+                options=["Any", "Rent", "Sale"],
+                horizontal=True,
+                key="listing_type_filter",
+            )
             st.caption("Chat Retrieval Filters")
-            min_price = st.number_input("Min Price", min_value=0.0, value=0.0, step=100.0, key="retr_min_price_input")
-            max_price = st.number_input("Max Price", min_value=0.0, value=0.0, step=100.0, key="retr_max_price_input")
+            min_price = st.number_input(
+                "Min Price", min_value=0.0, value=0.0, step=100.0, key="retr_min_price_input"
+            )
+            max_price = st.number_input(
+                "Max Price", min_value=0.0, value=0.0, step=100.0, key="retr_max_price_input"
+            )
             sort_label = st.selectbox(
                 "Sort by",
                 options=["Relevance", "Price", "Price per sqm", "Rooms"],
@@ -1272,12 +1354,18 @@ def render_market_insights_tab():
         with colA:
             st.caption("Map")
             if not cities:
-                st.info(get_text('no_data', lang))
+                st.info(get_text("no_data", lang))
             else:
-                center_city = st.selectbox("Center City", options=cities or [""], index=0 if cities else 0)
-                radius_km = st.slider("Radius (km)", min_value=1, max_value=50, value=10, key="map_radius_km")
+                center_city = st.selectbox(
+                    "Center City", options=cities or [""], index=0 if cities else 0
+                )
+                radius_km = st.slider(
+                    "Radius (km)", min_value=1, max_value=50, value=10, key="map_radius_km"
+                )
 
-                m_center = st.session_state.get("geo_center_lat"), st.session_state.get("geo_center_lon")
+                m_center = st.session_state.get("geo_center_lat"), st.session_state.get(
+                    "geo_center_lon"
+                )
                 if m_center[0] is None or m_center[1] is None:
                     lat, lon = _get_city_coordinates(center_city)
                 else:
@@ -1300,11 +1388,24 @@ def render_market_insights_tab():
                 elif lt_label == "Sale":
                     listing_type = "sale"
 
-                has_coords = len(insights.df.dropna(subset=["lat", "lon"])) > 0 if len(insights.df) > 0 else False
+                coords_df = (
+                    insights.df.dropna(subset=["lat", "lon"])
+                    if len(insights.df) > 0
+                    else insights.df
+                )
+                excluded_no_coords = (
+                    int(len(insights.df) - len(coords_df)) if len(insights.df) > 0 else 0
+                )
+                has_coords = len(coords_df) > 0 if len(insights.df) > 0 else False
                 if not has_coords:
-                    st.info("No coordinates found in the loaded dataset.")
+                    if len(insights.df) > 0:
+                        st.info(f"{len(insights.df)} properties loaded, but none have coordinates.")
+                    else:
+                        st.info("No coordinates found in the loaded dataset.")
                     map_df = insights.df.iloc[0:0].copy()
                 else:
+                    if excluded_no_coords > 0:
+                        st.caption(f"Excluded {excluded_no_coords} properties without coordinates.")
                     map_df = insights.filter_properties(
                         center_lat=float(lat),
                         center_lon=float(lon),
@@ -1325,6 +1426,8 @@ def render_market_insights_tab():
                     )
 
                 st.write(f"Filtered properties: {len(map_df)}")
+                if len(map_df) > int(map_max_points):
+                    st.caption(f"Showing first {int(map_max_points)} of {len(map_df)} points.")
                 st.session_state.geo_center_city = center_city
                 st.session_state.geo_center_lat = float(lat)
                 st.session_state.geo_center_lon = float(lon)
@@ -1368,7 +1471,10 @@ def render_market_insights_tab():
                             lon2 = math.radians(float(plon))
                             dlat = lat2 - lat1
                             dlon = lon2 - lon1
-                            a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+                            a = (
+                                math.sin(dlat / 2) ** 2
+                                + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+                            )
                             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
                             dist_val = 6371.0 * c
                         except Exception:
@@ -1429,93 +1535,122 @@ def render_market_insights_tab():
             indices_df = insights.get_city_price_indices(selected_cities)
             st.dataframe(indices_df)
         else:
-            st.info(get_text('load_multiple_cities', lang))
+            st.info(get_text("load_multiple_cities", lang))
 
         st.caption("Monthly Price Index (YoY)")
-        ts_city = st.selectbox("Time Series City", options=cities or [""], index=0 if cities else 0, key="ts_city")
-        ts_window = st.slider("Moving Average (months)", min_value=1, max_value=12, value=3, key="ts_window")
+        ts_city = st.selectbox(
+            "Time Series City", options=cities or [""], index=0 if cities else 0, key="ts_city"
+        )
+        ts_window = st.slider(
+            "Moving Average (months)", min_value=1, max_value=12, value=3, key="ts_window"
+        )
         ts_anom = st.checkbox("Highlight anomalies (z-score)", value=True, key="ts_anom")
         if ts_city:
-            ts_df = insights.get_monthly_price_index(ts_city, window=int(ts_window), detect_anomalies=bool(ts_anom))
+            ts_df = insights.get_monthly_price_index(
+                ts_city, window=int(ts_window), detect_anomalies=bool(ts_anom)
+            )
             if len(ts_df) > 0:
                 # Prefer smoothed line if selected
-                chart_cols = ['avg_price']
-                if 'avg_price_ma' in ts_df.columns:
-                    chart_cols = ['avg_price_ma']
-                chart_df = ts_df[['month'] + chart_cols].set_index('month')
+                chart_cols = ["avg_price"]
+                if "avg_price_ma" in ts_df.columns:
+                    chart_cols = ["avg_price_ma"]
+                chart_df = ts_df[["month"] + chart_cols].set_index("month")
                 st.line_chart(chart_df)
                 st.dataframe(ts_df)
 
-        st.caption(get_text('yoy_by_city_latest', lang))
+        st.caption(get_text("yoy_by_city_latest", lang))
         yoy_df = insights.get_cities_yoy(selected_cities or None)
         if len(yoy_df) > 0:
             st.dataframe(yoy_df)
-            top_up = yoy_df.sort_values('yoy_pct', ascending=False).head(5)
-            top_down = yoy_df.sort_values('yoy_pct', ascending=True).head(5)
-            st.caption(get_text('top_gainers', lang))
+            top_up = yoy_df.sort_values("yoy_pct", ascending=False).head(5)
+            top_down = yoy_df.sort_values("yoy_pct", ascending=True).head(5)
+            st.caption(get_text("top_gainers", lang))
             st.dataframe(top_up)
-            st.caption(get_text('top_decliners', lang))
+            st.caption(get_text("top_decliners", lang))
             st.dataframe(top_down)
 
         st.divider()
         st.caption("Export Indices")
-        export_kind = st.radio("Dataset", options=["City Indices","Monthly Index"], horizontal=True)
-        export_format = st.selectbox("Format", options=["csv","xlsx","json","md"], index=0)
+        export_kind = st.radio(
+            "Dataset", options=["City Indices", "Monthly Index"], horizontal=True
+        )
+        export_format = st.selectbox("Format", options=["csv", "xlsx", "json", "md"], index=0)
         gen_digest = st.checkbox("Generate Expert Digest")
-        digest_format = st.selectbox("Digest Format", options=["md","pdf"], index=0)
+        digest_format = st.selectbox("Digest Format", options=["md", "pdf"], index=0)
         if st.button("Generate Indices Export"):
             exp = InsightsExporter(insights)
             try:
                 if gen_digest:
-                    if digest_format == 'md':
+                    if digest_format == "md":
                         digest_md = exp.generate_digest_markdown(selected_cities or None)
-                        st.download_button(label="Download Expert Digest (MD)", data=digest_md, file_name="expert_digest.md", mime="text/markdown", use_container_width=True)
+                        st.download_button(
+                            label="Download Expert Digest (MD)",
+                            data=digest_md,
+                            file_name="expert_digest.md",
+                            mime="text/markdown",
+                            use_container_width=True,
+                        )
                     else:
                         digest_pdf = exp.generate_digest_pdf(selected_cities or None)
-                        st.download_button(label="Download Expert Digest (PDF)", data=digest_pdf.getvalue(), file_name="expert_digest.pdf", mime="application/pdf", use_container_width=True)
+                        st.download_button(
+                            label="Download Expert Digest (PDF)",
+                            data=digest_pdf.getvalue(),
+                            file_name="expert_digest.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                        )
                 else:
                     if export_kind == "City Indices":
-                        if export_format == 'csv':
+                        if export_format == "csv":
                             data = exp.export_city_indices_csv(selected_cities or None)
-                            mime = 'text/csv'
-                            filename = 'city_indices.csv'
-                        elif export_format == 'xlsx':
+                            mime = "text/csv"
+                            filename = "city_indices.csv"
+                        elif export_format == "xlsx":
                             buf = exp.export_city_indices_excel(selected_cities or None)
                             data = buf.getvalue()
-                            mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                            filename = 'city_indices.xlsx'
-                        elif export_format == 'json':
+                            mime = (
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                            filename = "city_indices.xlsx"
+                        elif export_format == "json":
                             data = exp.export_city_indices_json(selected_cities or None)
-                            mime = 'application/json'
-                            filename = 'city_indices.json'
+                            mime = "application/json"
+                            filename = "city_indices.json"
                         else:
                             data = exp.export_city_indices_markdown(selected_cities or None)
-                            mime = 'text/markdown'
-                            filename = 'city_indices.md'
+                            mime = "text/markdown"
+                            filename = "city_indices.md"
                     else:
                         city = ts_city if ts_city else None
-                        if export_format == 'csv':
+                        if export_format == "csv":
                             data = exp.export_monthly_index_csv(city)
-                            mime = 'text/csv'
-                            filename = 'monthly_index.csv'
-                        elif export_format == 'xlsx':
+                            mime = "text/csv"
+                            filename = "monthly_index.csv"
+                        elif export_format == "xlsx":
                             buf = exp.export_monthly_index_excel(city)
                             data = buf.getvalue()
-                            mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                            filename = 'monthly_index.xlsx'
-                        elif export_format == 'json':
+                            mime = (
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                            filename = "monthly_index.xlsx"
+                        elif export_format == "json":
                             data = exp.export_monthly_index_json(city)
-                            mime = 'application/json'
-                            filename = 'monthly_index.json'
+                            mime = "application/json"
+                            filename = "monthly_index.json"
                         else:
                             data = exp.export_monthly_index_markdown(city)
-                            mime = 'text/markdown'
-                            filename = 'monthly_index.md'
+                            mime = "text/markdown"
+                            filename = "monthly_index.md"
 
-                    st.download_button(label=f"Download {export_format.upper()}", data=data, file_name=filename, mime=mime, use_container_width=True)
+                    st.download_button(
+                        label=f"Download {export_format.upper()}",
+                        data=data,
+                        file_name=filename,
+                        mime=mime,
+                        use_container_width=True,
+                    )
             except Exception as e:
                 st.error(f"Failed to export indices: {e}")
-    
 
     st.divider()
 
@@ -1538,30 +1673,32 @@ def render_market_insights_tab():
     st.divider()
 
     # Amenity impact
-    st.subheader(get_text('amenity_impact_title', lang))
+    st.subheader(get_text("amenity_impact_title", lang))
 
     amenity_impact = insights.get_amenity_impact_on_price()
     if amenity_impact:
-        impact_df = pd.DataFrame([
-            {'Amenity': amenity.replace('_', ' ').title(), 'Price Increase %': impact}
-            for amenity, impact in amenity_impact.items()
-        ]).sort_values('Price Increase %', ascending=False)
+        impact_df = pd.DataFrame(
+            [
+                {"Amenity": amenity.replace("_", " ").title(), "Price Increase %": impact}
+                for amenity, impact in amenity_impact.items()
+            ]
+        ).sort_values("Price Increase %", ascending=False)
 
         try:
-            import pyarrow as pa  # noqa: F401
-            st.bar_chart(impact_df.set_index('Amenity'))
+            st.bar_chart(impact_df.set_index("Amenity"))
         except Exception:
             try:
                 import matplotlib.pyplot as plt
+
                 fig, ax = plt.subplots()
-                s = impact_df.set_index('Amenity')['Price Increase %']
-                s.plot(kind='bar', ax=ax)
-                ax.set_xlabel('Amenity')
-                ax.set_ylabel('Price Increase %')
+                s = impact_df.set_index("Amenity")["Price Increase %"]
+                s.plot(kind="bar", ax=ax)
+                ax.set_xlabel("Amenity")
+                ax.set_ylabel("Price Increase %")
                 st.pyplot(fig)
             except Exception:
                 st.dataframe(impact_df)
-        st.caption(get_text('amenity_impact_caption', lang))
+        st.caption(get_text("amenity_impact_caption", lang))
 
 
 def render_export_tab():
@@ -1569,76 +1706,78 @@ def render_export_tab():
     lang = st.session_state.language
 
     if not st.session_state.data_loaded or st.session_state.property_collection is None:
-        st.info(get_text('please_load_data_export', lang))
+        st.info(get_text("please_load_data_export", lang))
         return
 
     st.header(f"💾 {get_text('export_properties', lang)}")
 
-    st.write(get_text('export_subtitle', lang))
+    st.write(get_text("export_subtitle", lang))
 
     # Export options
     col1, col2 = st.columns([2, 3])
 
     with col1:
-        st.subheader(get_text('export_settings', lang))
+        st.subheader(get_text("export_settings", lang))
 
         format_choice = st.selectbox(
-            get_text('select_format', lang),
+            get_text("select_format", lang),
             options=[fmt.value for fmt in ExportFormat],
             format_func=lambda x: {
-                'csv': '📄 CSV (Spreadsheet)',
-                'xlsx': '📊 Excel (Multi-sheet)',
-                'json': '🔧 JSON (Structured)',
-                'md': '📝 Markdown (Report)'
-            }.get(x, x)
+                "csv": "📄 CSV (Spreadsheet)",
+                "xlsx": "📊 Excel (Multi-sheet)",
+                "json": "🔧 JSON (Structured)",
+                "md": "📝 Markdown (Report)",
+            }.get(x, x),
         )
 
-        include_summary = st.checkbox(get_text('include_summary_stats', lang), value=True)
+        include_summary = st.checkbox(get_text("include_summary_stats", lang), value=True)
 
-        if format_choice == 'md':
+        if format_choice == "md":
             max_props = st.number_input(
-                get_text('max_properties_report', lang),
+                get_text("max_properties_report", lang),
                 min_value=5,
                 max_value=len(st.session_state.property_collection.properties),
-                value=min(20, len(st.session_state.property_collection.properties))
+                value=min(20, len(st.session_state.property_collection.properties)),
             )
 
     with col2:
-        st.subheader(get_text('preview', lang))
+        st.subheader(get_text("preview", lang))
 
         properties = st.session_state.property_collection
         st.write(f"**{get_text('total_properties', lang)}:** {len(properties.properties)}")
 
         if properties.properties:
             sample = properties.properties[0]
-            st.write(f"**{get_text('sample', lang)}** {sample.city} - ${sample.price}/mo - {int(sample.rooms)} {get_text('rooms', lang).lower()}")
+            st.write(
+                f"**{get_text('sample', lang)}** {sample.city} - ${sample.price}/mo - {int(sample.rooms)} {get_text('rooms', lang).lower()}"
+            )
 
         st.divider()
 
         # Export button
-        if st.button(get_text('generate_export_button', lang), type="primary", use_container_width=True):
+        if st.button(
+            get_text("generate_export_button", lang), type="primary", use_container_width=True
+        ):
             try:
                 with st.spinner(f"Generating {format_choice.upper()} export..."):
                     exporter = PropertyExporter(properties)
 
-                    if format_choice == 'csv':
+                    if format_choice == "csv":
                         data = exporter.export_to_csv()
                         filename = exporter.get_filename(ExportFormat.CSV)
                         mime = "text/csv"
 
-                    elif format_choice == 'xlsx':
+                    elif format_choice == "xlsx":
                         data = exporter.export_to_excel(
-                            include_summary=include_summary,
-                            include_statistics=True
+                            include_summary=include_summary, include_statistics=True
                         )
                         filename = exporter.get_filename(ExportFormat.EXCEL)
                         mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         data = data.getvalue()
 
-                    elif format_choice == 'json':
+                    elif format_choice == "json":
                         data = exporter.export_to_json(
-                            pretty=True,
-                            include_metadata=include_summary
+                            pretty=True, include_metadata=include_summary
                         )
                         filename = exporter.get_filename(ExportFormat.JSON)
                         mime = "application/json"
@@ -1646,15 +1785,14 @@ def render_export_tab():
                     else:  # markdown
                         data = exporter.export_to_markdown(
                             include_summary=include_summary,
-                            max_properties=max_props if format_choice == 'md' else None
+                            max_properties=max_props if format_choice == "md" else None,
                         )
                         filename = exporter.get_filename(ExportFormat.MARKDOWN)
                         mime = "text/markdown"
 
                     # Track export (Phase 3)
                     st.session_state.session_tracker.track_export(
-                        format=format_choice,
-                        property_count=len(properties.properties)
+                        format=format_choice, property_count=len(properties.properties)
                     )
 
                     st.success("✅ Export generated successfully!")
@@ -1664,7 +1802,7 @@ def render_export_tab():
                         data=data,
                         file_name=filename,
                         mime=mime,
-                        use_container_width=True
+                        use_container_width=True,
                     )
 
             except Exception as e:
@@ -1675,7 +1813,8 @@ def render_export_tab():
 
     # Export format descriptions
     with st.expander(f"ℹ️ {get_text('format_information', lang)}"):
-        st.markdown("""
+        st.markdown(
+            """
         **CSV (Comma-Separated Values)**
         - Simple spreadsheet format
         - Compatible with Excel, Google Sheets
@@ -1695,7 +1834,8 @@ def render_export_tab():
         - Human-readable report format
         - Best for documentation
         - Includes summaries and descriptions
-        """)
+        """
+        )
 
 
 def render_comparisons_tab():
@@ -1703,17 +1843,17 @@ def render_comparisons_tab():
     lang = st.session_state.language
 
     if not st.session_state.data_loaded or st.session_state.property_collection is None:
-        st.info(get_text('please_load_data_compare', lang))
+        st.info(get_text("please_load_data_compare", lang))
         return
 
     st.header(f"🔄 {get_text('property_comparison', lang)}")
 
     properties = st.session_state.property_collection.properties
 
-    st.write(get_text('select_2_4_properties', lang))
+    st.write(get_text("select_2_4_properties", lang))
 
     # Property selection
-    st.subheader(get_text('select_properties', lang))
+    st.subheader(get_text("select_properties", lang))
 
     # Create property display names
     property_options = {
@@ -1722,19 +1862,19 @@ def render_comparisons_tab():
     }
 
     selected_names = st.multiselect(
-        get_text('choose_properties_2_4', lang),
+        get_text("choose_properties_2_4", lang),
         options=list(property_options.keys()),
-        max_selections=4
+        max_selections=4,
     )
 
     selected_properties = [property_options[name] for name in selected_names]
 
     if len(selected_properties) < 2:
-        st.info(get_text('select_at_least_2', lang))
+        st.info(get_text("select_at_least_2", lang))
         return
 
     if len(selected_properties) > 4:
-        st.warning(get_text('maximum_4_properties', lang))
+        st.warning(get_text("maximum_4_properties", lang))
         return
 
     st.divider()
@@ -1759,23 +1899,23 @@ def render_analytics_tab():
     # Session statistics
     stats = tracker.get_session_stats()
 
-    st.subheader(get_text('current_session', lang))
+    st.subheader(get_text("current_session", lang))
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric(get_text('queries', lang), stats.total_queries)
+        st.metric(get_text("queries", lang), stats.total_queries)
     with col2:
-        st.metric(get_text('property_views', lang), stats.total_property_views)
+        st.metric(get_text("property_views", lang), stats.total_property_views)
     with col3:
-        st.metric(get_text('exports', lang), stats.total_exports)
+        st.metric(get_text("exports", lang), stats.total_exports)
     with col4:
-        st.metric(get_text('duration', lang), f"{stats.total_duration_minutes:.1f} min")
+        st.metric(get_text("duration", lang), f"{stats.total_duration_minutes:.1f} min")
 
     st.divider()
 
     # Popular queries
     if stats.total_queries > 0:
-        st.subheader(get_text('query_activity', lang))
+        st.subheader(get_text("query_activity", lang))
 
         popular = tracker.get_popular_queries(top_n=5)
         if popular:
@@ -1792,13 +1932,13 @@ def render_analytics_tab():
 
     # Models used
     if stats.unique_models_used:
-        st.subheader(get_text('models_used', lang))
+        st.subheader(get_text("models_used", lang))
         for model in stats.unique_models_used:
             st.write(f"- {model}")
 
     # Tools used
     if stats.tools_used:
-        st.subheader(get_text('tools_used', lang))
+        st.subheader(get_text("tools_used", lang))
         tool_counts = {}
         for tool in stats.tools_used:
             tool_counts[tool] = tool_counts.get(tool, 0) + 1
@@ -1811,16 +1951,16 @@ def render_analytics_tab():
     # Aggregate statistics
     try:
         aggregate = SessionTracker.get_aggregate_stats()
-        if aggregate.get('total_sessions', 0) > 0:
-            st.subheader(get_text('all_time_stats', lang))
+        if aggregate.get("total_sessions", 0) > 0:
+            st.subheader(get_text("all_time_stats", lang))
 
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Total Sessions", aggregate.get('total_sessions', 0))
+                st.metric("Total Sessions", aggregate.get("total_sessions", 0))
             with col2:
-                st.metric("Total Queries", aggregate.get('total_queries', 0))
+                st.metric("Total Queries", aggregate.get("total_queries", 0))
             with col3:
-                st.metric("Total Exports", aggregate.get('total_exports', 0))
+                st.metric("Total Exports", aggregate.get("total_exports", 0))
 
     except Exception:
         pass  # Aggregate stats not available
@@ -1839,10 +1979,10 @@ def render_notifications_tab():
     # User email input
     st.subheader(f"📧 {get_text('user_information', lang)}")
     user_email = st.text_input(
-        get_text('your_email', lang),
+        get_text("your_email", lang),
         value=st.session_state.user_email,
-        placeholder=get_text('email_placeholder', lang),
-        help=get_text('email_help', lang)
+        placeholder=get_text("email_placeholder", lang),
+        help=get_text("email_help", lang),
     )
 
     if user_email != st.session_state.user_email:
@@ -1853,17 +1993,19 @@ def render_notifications_tab():
     # Email Service Configuration
     st.subheader(f"⚙️ {get_text('email_service_config', lang)}")
 
-    with st.expander(get_text('configure_email', lang), expanded=st.session_state.email_service is None):
+    with st.expander(
+        get_text("configure_email", lang), expanded=st.session_state.email_service is None
+    ):
         provider_options = {
             "Gmail": EmailProvider.GMAIL,
             "Outlook": EmailProvider.OUTLOOK,
-            "Custom SMTP": EmailProvider.CUSTOM
+            "Custom SMTP": EmailProvider.CUSTOM,
         }
 
         selected_provider = st.selectbox(
-            get_text('email_provider', lang),
+            get_text("email_provider", lang),
             options=list(provider_options.keys()),
-            help=get_text('email_provider', lang)
+            help=get_text("email_provider", lang),
         )
 
         provider = provider_options[selected_provider]
@@ -1871,41 +2013,41 @@ def render_notifications_tab():
         col1, col2 = st.columns(2)
         with col1:
             smtp_username = st.text_input(
-                get_text('email_username', lang),
-                help=get_text('email_username', lang),
-                label_visibility="visible"
+                get_text("email_username", lang),
+                help=get_text("email_username", lang),
+                label_visibility="visible",
             )
         with col2:
             smtp_password = st.text_input(
-                get_text('email_password', lang),
+                get_text("email_password", lang),
                 type="password",
-                help=get_text('app_password_help', lang),
-                label_visibility="visible"
+                help=get_text("app_password_help", lang),
+                label_visibility="visible",
             )
 
         if provider == EmailProvider.CUSTOM:
             col1, col2 = st.columns(2)
             with col1:
-                smtp_server = st.text_input(get_text('smtp_server', lang), value="smtp.example.com")
+                smtp_server = st.text_input(get_text("smtp_server", lang), value="smtp.example.com")
             with col2:
-                smtp_port = st.number_input(get_text('smtp_port', lang), value=587, min_value=1, max_value=65535)
+                smtp_port = st.number_input(
+                    get_text("smtp_port", lang), value=587, min_value=1, max_value=65535
+                )
 
-            use_tls = st.checkbox(get_text('use_tls', lang), value=True)
+            use_tls = st.checkbox(get_text("use_tls", lang), value=True)
 
-        if st.button(get_text('save_email_config', lang), type="primary"):
+        if st.button(get_text("save_email_config", lang), type="primary"):
             if not smtp_username or not smtp_password:
-                st.error(get_text('provide_credentials', lang))
+                st.error(get_text("provide_credentials", lang))
             else:
                 try:
                     if provider == EmailProvider.GMAIL:
                         email_service = EmailServiceFactory.create_gmail_service(
-                            username=smtp_username,
-                            password=smtp_password
+                            username=smtp_username, password=smtp_password
                         )
                     elif provider == EmailProvider.OUTLOOK:
                         email_service = EmailServiceFactory.create_outlook_service(
-                            username=smtp_username,
-                            password=smtp_password
+                            username=smtp_username, password=smtp_password
                         )
                     else:  # Custom
                         config = EmailConfig(
@@ -1915,30 +2057,27 @@ def render_notifications_tab():
                             username=smtp_username,
                             password=smtp_password,
                             from_email=smtp_username,
-                            use_tls=use_tls
+                            use_tls=use_tls,
                         )
                         email_service = EmailService(config)
 
                     st.session_state.email_service = email_service
-                    st.success(get_text('email_config_success', lang))
+                    st.success(get_text("email_config_success", lang))
                 except Exception:
-                    st.error(get_text('email_config_error', lang))
+                    st.error(get_text("email_config_error", lang))
 
     # Test email configuration
     if st.session_state.email_service and user_email:
-        if st.button(get_text('send_test_email', lang)):
+        if st.button(get_text("send_test_email", lang)):
             try:
-                subject, html = TestEmailTemplate.render(user_name=user_email.split('@')[0])
+                subject, html = TestEmailTemplate.render(user_name=user_email.split("@")[0])
                 success = st.session_state.email_service.send_email(
-                    to_email=user_email,
-                    subject=subject,
-                    body=html,
-                    html=True
+                    to_email=user_email, subject=subject, body=html, html=True
                 )
                 if success:
-                    st.success(get_text('test_email_success', lang))
+                    st.success(get_text("test_email_success", lang))
                 else:
-                    st.error(get_text('test_email_error', lang))
+                    st.error(get_text("test_email_error", lang))
             except Exception as e:
                 st.error(f"❌ Error sending test email: {str(e)}")
 
@@ -1946,16 +2085,14 @@ def render_notifications_tab():
 
     # Notification Preferences
     if user_email:
-        st.subheader(get_text('notification_preferences', lang))
+        st.subheader(get_text("notification_preferences", lang))
 
         prefs_manager = st.session_state.notification_prefs_manager
         prefs = prefs_manager.get_preferences(user_email)
 
         # Enable/Disable notifications
         enabled = st.checkbox(
-            "Enable Notifications",
-            value=prefs.enabled,
-            help="Turn notifications on or off"
+            "Enable Notifications", value=prefs.enabled, help="Turn notifications on or off"
         )
 
         col1, col2 = st.columns(2)
@@ -1966,16 +2103,18 @@ def render_notifications_tab():
                 "Instant": AlertFrequency.INSTANT,
                 "Hourly": AlertFrequency.HOURLY,
                 "Daily Digest": AlertFrequency.DAILY,
-                "Weekly Digest": AlertFrequency.WEEKLY
+                "Weekly Digest": AlertFrequency.WEEKLY,
             }
 
-            current_freq = next(k for k, v in frequency_options.items() if v == prefs.alert_frequency)
+            current_freq = next(
+                k for k, v in frequency_options.items() if v == prefs.alert_frequency
+            )
 
             selected_frequency = st.selectbox(
                 "Alert Frequency",
                 options=list(frequency_options.keys()),
                 index=list(frequency_options.keys()).index(current_freq),
-                help="How often to receive notifications"
+                help="How often to receive notifications",
             )
 
             # Price drop threshold
@@ -1985,7 +2124,7 @@ def render_notifications_tab():
                 max_value=20.0,
                 value=prefs.price_drop_threshold,
                 step=0.5,
-                help="Minimum price drop percentage to trigger alert"
+                help="Minimum price drop percentage to trigger alert",
             )
 
             # Max alerts per day
@@ -1994,7 +2133,7 @@ def render_notifications_tab():
                 min_value=1,
                 max_value=100,
                 value=prefs.max_alerts_per_day,
-                help="Maximum number of alerts to receive per day"
+                help="Maximum number of alerts to receive per day",
             )
 
         with col2:
@@ -2002,25 +2141,44 @@ def render_notifications_tab():
             st.write("**Quiet Hours** (No alerts during these times)")
             quiet_start = st.time_input(
                 "Quiet Hours Start",
-                value=datetime.strptime(prefs.quiet_hours_start or "22:00", "%H:%M").time()
+                value=datetime.strptime(prefs.quiet_hours_start or "22:00", "%H:%M").time(),
             )
             quiet_end = st.time_input(
                 "Quiet Hours End",
-                value=datetime.strptime(prefs.quiet_hours_end or "08:00", "%H:%M").time()
+                value=datetime.strptime(prefs.quiet_hours_end or "08:00", "%H:%M").time(),
             )
 
             # Digest time (if daily/weekly)
-            if frequency_options[selected_frequency] in [AlertFrequency.DAILY, AlertFrequency.WEEKLY]:
+            if frequency_options[selected_frequency] in [
+                AlertFrequency.DAILY,
+                AlertFrequency.WEEKLY,
+            ]:
                 digest_time = st.time_input(
                     "Digest Send Time",
-                    value=datetime.strptime(prefs.daily_digest_time, "%H:%M").time()
+                    value=datetime.strptime(prefs.daily_digest_time, "%H:%M").time(),
                 )
 
                 if frequency_options[selected_frequency] == AlertFrequency.WEEKLY:
                     digest_day = st.selectbox(
                         "Weekly Digest Day",
-                        options=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-                        index=["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].index(prefs.weekly_digest_day.value)
+                        options=[
+                            "Monday",
+                            "Tuesday",
+                            "Wednesday",
+                            "Thursday",
+                            "Friday",
+                            "Saturday",
+                            "Sunday",
+                        ],
+                        index=[
+                            "monday",
+                            "tuesday",
+                            "wednesday",
+                            "thursday",
+                            "friday",
+                            "saturday",
+                            "sunday",
+                        ].index(prefs.weekly_digest_day.value),
                     )
 
         # Alert type toggles
@@ -2031,24 +2189,24 @@ def render_notifications_tab():
             enable_price_drops = st.checkbox(
                 "💰 Price Drop Alerts",
                 value="price_drop" in [a.value for a in prefs.enabled_alerts],
-                help="Get notified when property prices drop"
+                help="Get notified when property prices drop",
             )
             enable_new_properties = st.checkbox(
                 "🏠 New Property Alerts",
                 value="new_property" in [a.value for a in prefs.enabled_alerts],
-                help="Get notified about new properties"
+                help="Get notified about new properties",
             )
 
         with alert_col2:
             enable_saved_searches = st.checkbox(
                 "🔍 Saved Search Matches",
                 value="saved_search_match" in [a.value for a in prefs.enabled_alerts],
-                help="Get notified when properties match your saved searches"
+                help="Get notified when properties match your saved searches",
             )
             enable_market_updates = st.checkbox(
                 "📈 Market Updates",
                 value="market_update" in [a.value for a in prefs.enabled_alerts],
-                help="Get market insights and trends"
+                help="Get market insights and trends",
             )
 
         # Save preferences button
@@ -2076,13 +2234,15 @@ def render_notifications_tab():
                     max_alerts_per_day=max_alerts,
                     quiet_hours_start=quiet_start.strftime("%H:%M"),
                     quiet_hours_end=quiet_end.strftime("%H:%M"),
-                    enabled_alerts=enabled_alerts
+                    enabled_alerts=enabled_alerts,
                 )
 
-                if frequency_options[selected_frequency] in [AlertFrequency.DAILY, AlertFrequency.WEEKLY]:
+                if frequency_options[selected_frequency] in [
+                    AlertFrequency.DAILY,
+                    AlertFrequency.WEEKLY,
+                ]:
                     prefs_manager.update_preferences(
-                        user_email,
-                        daily_digest_time=digest_time.strftime("%H:%M")
+                        user_email, daily_digest_time=digest_time.strftime("%H:%M")
                     )
 
                     if frequency_options[selected_frequency] == AlertFrequency.WEEKLY:
@@ -2093,11 +2253,10 @@ def render_notifications_tab():
                             "Thursday": DigestDay.THURSDAY,
                             "Friday": DigestDay.FRIDAY,
                             "Saturday": DigestDay.SATURDAY,
-                            "Sunday": DigestDay.SUNDAY
+                            "Sunday": DigestDay.SUNDAY,
                         }
                         prefs_manager.update_preferences(
-                            user_email,
-                            weekly_digest_day=day_map[digest_day]
+                            user_email, weekly_digest_day=day_map[digest_day]
                         )
 
                 st.success("✅ Notification preferences saved successfully!")
@@ -2128,7 +2287,9 @@ def render_notifications_tab():
                         if notification.sent_at:
                             st.write(f"**Sent:** {notification.sent_at.strftime('%Y-%m-%d %H:%M')}")
                         if notification.delivered_at:
-                            st.write(f"**Delivered:** {notification.delivered_at.strftime('%Y-%m-%d %H:%M')}")
+                            st.write(
+                                f"**Delivered:** {notification.delivered_at.strftime('%Y-%m-%d %H:%M')}"
+                            )
 
                     if notification.error_message:
                         st.error(f"Error: {notification.error_message}")
@@ -2141,32 +2302,34 @@ def render_notifications_tab():
 
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Total Sent", stats['total_sent'])
+                st.metric("Total Sent", stats["total_sent"])
             with col2:
-                st.metric("Delivered", stats['total_delivered'])
+                st.metric("Delivered", stats["total_delivered"])
             with col3:
                 st.metric("Delivery Rate", f"{stats['delivery_rate']:.1f}%")
             with col4:
-                st.metric("Failed", stats['total_failed'])
+                st.metric("Failed", stats["total_failed"])
         else:
-            st.info(get_text('no_notifications_yet', lang))
+            st.info(get_text("no_notifications_yet", lang))
 
 
 def render_main_content():
     """Render main content area with tabs."""
     lang = st.session_state.language
     st.title(f"{settings.app_icon} {get_text('app_title', lang)}")
-    st.caption(get_text('app_subtitle', lang))
+    st.caption(get_text("app_subtitle", lang))
 
     # Create tabs
-    tabs = st.tabs([
-        get_text('tab_chat', lang),
-        get_text('tab_insights', lang),
-        get_text('tab_compare', lang),
-        get_text('tab_export', lang),
-        get_text('tab_analytics', lang),
-        get_text('tab_notifications', lang)
-    ])
+    tabs = st.tabs(
+        [
+            get_text("tab_chat", lang),
+            get_text("tab_insights", lang),
+            get_text("tab_compare", lang),
+            get_text("tab_export", lang),
+            get_text("tab_analytics", lang),
+            get_text("tab_notifications", lang),
+        ]
+    )
 
     with tabs[0]:
         render_chat_tab()
@@ -2189,10 +2352,11 @@ def render_main_content():
 
 def apply_theme():
     """Apply custom CSS for light theme only."""
-    theme = 'light'
+    theme = "light"
 
-    if theme == 'dark':
-        st.markdown("""
+    if theme == "dark":
+        st.markdown(
+            """
         <style>
             /* Dark theme colors - Comprehensive */
             .stApp {
@@ -2367,8 +2531,11 @@ def apply_theme():
                 color: #fafafa !important;
             }
         </style>
-        """, unsafe_allow_html=True)
-        st.markdown("""
+        """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
         <script>
         try {
           localStorage.setItem('ai-real-estate-theme','dark');
@@ -2377,8 +2544,11 @@ def apply_theme():
           var stApp = document.querySelector('.stApp'); if (stApp) stApp.setAttribute('data-theme','dark');
         } catch(e) {}
         </script>
-        """, unsafe_allow_html=True)
-        st.markdown("""
+        """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
         <script>
         setTimeout(() => {
           document.querySelectorAll('input').forEach(el => {
@@ -2391,10 +2561,13 @@ def apply_theme():
           });
         }, 0);
         </script>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
     else:
         # Light theme (default Streamlit theme)
-        st.markdown("""
+        st.markdown(
+            """
         <style>
             /* Light theme colors (enhanced) */
             .stApp {
@@ -2852,8 +3025,11 @@ def apply_theme():
                 color: #31333F !important;
             }
         </style>
-        """, unsafe_allow_html=True)
-        st.markdown("""
+        """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
         <script>
         try {
           localStorage.setItem('ai-real-estate-theme','light');
@@ -2862,8 +3038,11 @@ def apply_theme():
           var stApp = document.querySelector('.stApp'); if (stApp) stApp.setAttribute('data-theme','light');
         } catch(e) {}
         </script>
-        """, unsafe_allow_html=True)
-        st.markdown("""
+        """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
         <script>
         (function(){
           function markReadonly(){
@@ -2898,7 +3077,9 @@ def apply_theme():
           setInterval(markReadonly, 500);
         })();
         </script>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
 
 def main():
@@ -2918,7 +3099,9 @@ def main():
     # Footer
     lang = st.session_state.language
     st.divider()
-    st.caption(f"© 2025 [Alex Nesterovich](https://github.com/AleksNeStu) | {get_text('version', lang)} {settings.version}")
+    st.caption(
+        f"© 2025 [Alex Nesterovich](https://github.com/AleksNeStu) | {get_text('version', lang)} {settings.version}"
+    )
 
 
 if __name__ == "__main__":

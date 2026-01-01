@@ -104,7 +104,7 @@
   - [DONE] Chat retrieval price range filters and sorting controls
   - [DONE] Multi-city YoY latest with UI table and leaders
   - [DONE] Deterministic lat/lon fill at ingestion for known cities
-  - Map with filters, neutral UI states (est: 2–3 days)
+  - [DONE] Map with filters, neutral UI states (est: 2–3 days)
   - Base digest (consumer/expert) (est: 2–4 days)
 - Sprint 2 (2–3 weeks)
   - Indices and comparables for CIS/Russia/Turkey/USA/Africa

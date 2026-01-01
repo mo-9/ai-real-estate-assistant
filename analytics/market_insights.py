@@ -8,11 +8,12 @@ This module provides comprehensive market analysis including:
 - Amenity correlation analysis
 """
 
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
-import pandas as pd
+from typing import Any, Dict, List, Optional
+
 import numpy as np
+import pandas as pd
 from pydantic import BaseModel, Field
 
 from data.schemas import PropertyCollection
@@ -20,6 +21,7 @@ from data.schemas import PropertyCollection
 
 class TrendDirection(str, Enum):
     """Trend direction indicators."""
+
     INCREASING = "increasing"
     DECREASING = "decreasing"
     STABLE = "stable"
@@ -29,6 +31,7 @@ class TrendDirection(str, Enum):
 @dataclass
 class PriceTrend:
     """Price trend analysis result."""
+
     direction: TrendDirection
     change_percent: float
     average_price: float
@@ -40,6 +43,7 @@ class PriceTrend:
 
 class MarketStatistics(BaseModel):
     """Comprehensive market statistics."""
+
     total_properties: int = Field(description="Total number of properties")
     average_price: float = Field(description="Average property price")
     median_price: float = Field(description="Median property price")
@@ -66,6 +70,7 @@ class MarketStatistics(BaseModel):
 
 class LocationInsights(BaseModel):
     """Insights for a specific location."""
+
     city: str
     property_count: int
     avg_price: float
@@ -78,6 +83,7 @@ class LocationInsights(BaseModel):
 
 class PropertyTypeInsights(BaseModel):
     """Insights for a specific property type."""
+
     property_type: str
     count: int
     avg_price: float
@@ -109,32 +115,42 @@ class MarketInsights:
         """Convert properties to pandas DataFrame for analysis."""
         data = []
         for prop in self.properties.properties:
-            data.append({
-                'id': getattr(prop, 'id', None),
-                'country': getattr(prop, 'country', None),
-                'region': getattr(prop, 'region', None),
-                'city': prop.city,
-                'district': getattr(prop, 'district', None),
-                'neighborhood': getattr(prop, 'neighborhood', None),
-                'price': prop.price,
-                'currency': getattr(prop, 'currency', None),
-                'listing_type': prop.listing_type.value if hasattr(prop.listing_type, 'value') else str(prop.listing_type),
-                'rooms': prop.rooms,
-                'bathrooms': prop.bathrooms,
-                'area_sqm': prop.area_sqm,
-                'price_per_sqm': getattr(prop, 'price_per_sqm', None),
-                'property_type': prop.property_type.value if hasattr(prop.property_type, 'value') else str(prop.property_type),
-                'has_parking': prop.has_parking,
-                'has_garden': prop.has_garden,
-                'has_pool': prop.has_pool,
-                'is_furnished': prop.is_furnished,
-                'has_balcony': prop.has_balcony,
-                'has_elevator': prop.has_elevator,
-                'lat': getattr(prop, 'latitude', None),
-                'lon': getattr(prop, 'longitude', None),
-                'year_built': getattr(prop, 'year_built', None),
-                'energy_cert': getattr(prop, 'energy_cert', None),
-            })
+            data.append(
+                {
+                    "id": getattr(prop, "id", None),
+                    "country": getattr(prop, "country", None),
+                    "region": getattr(prop, "region", None),
+                    "city": prop.city,
+                    "district": getattr(prop, "district", None),
+                    "neighborhood": getattr(prop, "neighborhood", None),
+                    "price": prop.price,
+                    "currency": getattr(prop, "currency", None),
+                    "listing_type": (
+                        prop.listing_type.value
+                        if hasattr(prop.listing_type, "value")
+                        else str(prop.listing_type)
+                    ),
+                    "rooms": prop.rooms,
+                    "bathrooms": prop.bathrooms,
+                    "area_sqm": prop.area_sqm,
+                    "price_per_sqm": getattr(prop, "price_per_sqm", None),
+                    "property_type": (
+                        prop.property_type.value
+                        if hasattr(prop.property_type, "value")
+                        else str(prop.property_type)
+                    ),
+                    "has_parking": prop.has_parking,
+                    "has_garden": prop.has_garden,
+                    "has_pool": prop.has_pool,
+                    "is_furnished": prop.is_furnished,
+                    "has_balcony": prop.has_balcony,
+                    "has_elevator": prop.has_elevator,
+                    "lat": getattr(prop, "latitude", None),
+                    "lon": getattr(prop, "longitude", None),
+                    "year_built": getattr(prop, "year_built", None),
+                    "energy_cert": getattr(prop, "energy_cert", None),
+                }
+            )
         return pd.DataFrame(data)
 
     def get_overall_statistics(self) -> MarketStatistics:
@@ -162,28 +178,32 @@ class MarketInsights:
 
         # Calculate price per sqm where area is available
         price_per_sqm = None
-        if self.df['area_sqm'].notna().any():
-            valid_area = self.df[self.df['area_sqm'].notna()]
-            price_per_sqm = (valid_area['price'] / valid_area['area_sqm']).mean()
+        if self.df["area_sqm"].notna().any():
+            valid_area = self.df[self.df["area_sqm"].notna()]
+            price_per_sqm = (valid_area["price"] / valid_area["area_sqm"]).mean()
 
         # Average area
-        avg_area = self.df['area_sqm'].mean() if self.df['area_sqm'].notna().any() else None
+        avg_area = self.df["area_sqm"].mean() if self.df["area_sqm"].notna().any() else None
 
         return MarketStatistics(
             total_properties=len(self.df),
-            average_price=float(self.df['price'].mean()),
-            median_price=float(self.df['price'].median()),
-            min_price=float(self.df['price'].min()),
-            max_price=float(self.df['price'].max()),
-            std_dev=float(self.df['price'].std()),
-            avg_rooms=float(self.df['rooms'].mean()),
+            average_price=float(self.df["price"].mean()),
+            median_price=float(self.df["price"].median()),
+            min_price=float(self.df["price"].min()),
+            max_price=float(self.df["price"].max()),
+            std_dev=float(self.df["price"].std()),
+            avg_rooms=float(self.df["rooms"].mean()),
             avg_area=float(avg_area) if avg_area is not None and not np.isnan(avg_area) else None,
-            parking_percentage=float(self.df['has_parking'].mean() * 100),
-            garden_percentage=float(self.df['has_garden'].mean() * 100),
-            furnished_percentage=float(self.df['is_furnished'].mean() * 100),
-            cities=self.df['city'].value_counts().to_dict(),
-            property_types=self.df['property_type'].value_counts().to_dict(),
-            avg_price_per_sqm=float(price_per_sqm) if price_per_sqm is not None and not np.isnan(price_per_sqm) else None
+            parking_percentage=float(self.df["has_parking"].mean() * 100),
+            garden_percentage=float(self.df["has_garden"].mean() * 100),
+            furnished_percentage=float(self.df["is_furnished"].mean() * 100),
+            cities=self.df["city"].value_counts().to_dict(),
+            property_types=self.df["property_type"].value_counts().to_dict(),
+            avg_price_per_sqm=(
+                float(price_per_sqm)
+                if price_per_sqm is not None and not np.isnan(price_per_sqm)
+                else None
+            ),
         )
 
     def get_price_trend(self, city: Optional[str] = None) -> PriceTrend:
@@ -196,27 +216,31 @@ class MarketInsights:
         Returns:
             PriceTrend with trend analysis
         """
-        df = self.df if city is None else self.df[self.df['city'] == city]
+        df = self.df if city is None else self.df[self.df["city"] == city]
 
         if len(df) < 5:
             return PriceTrend(
                 direction=TrendDirection.INSUFFICIENT_DATA,
                 change_percent=0.0,
-                average_price=float(df['price'].mean()) if len(df) > 0 else 0.0,
-                median_price=float(df['price'].median()) if len(df) > 0 else 0.0,
-                price_range=(float(df['price'].min()), float(df['price'].max())) if len(df) > 0 else (0.0, 0.0),
+                average_price=float(df["price"].mean()) if len(df) > 0 else 0.0,
+                median_price=float(df["price"].median()) if len(df) > 0 else 0.0,
+                price_range=(
+                    (float(df["price"].min()), float(df["price"].max()))
+                    if len(df) > 0
+                    else (0.0, 0.0)
+                ),
                 sample_size=len(df),
-                confidence="low"
+                confidence="low",
             )
 
         # Calculate basic statistics
-        avg_price = float(df['price'].mean())
-        median_price = float(df['price'].median())
+        avg_price = float(df["price"].mean())
+        median_price = float(df["price"].median())
 
         # Simple trend detection (comparing first half vs second half)
         mid_point = len(df) // 2
-        first_half_avg = float(df.iloc[:mid_point]['price'].mean())
-        second_half_avg = float(df.iloc[mid_point:]['price'].mean())
+        first_half_avg = float(df.iloc[:mid_point]["price"].mean())
+        second_half_avg = float(df.iloc[mid_point:]["price"].mean())
 
         change_percent = ((second_half_avg - first_half_avg) / first_half_avg) * 100
 
@@ -241,9 +265,9 @@ class MarketInsights:
             change_percent=change_percent,
             average_price=avg_price,
             median_price=median_price,
-            price_range=(float(df['price'].min()), float(df['price'].max())),
+            price_range=(float(df["price"].min()), float(df["price"].max())),
             sample_size=len(df),
-            confidence=confidence
+            confidence=confidence,
         )
 
     def get_location_insights(self, city: str) -> Optional[LocationInsights]:
@@ -256,35 +280,37 @@ class MarketInsights:
         Returns:
             LocationInsights or None if city not found
         """
-        city_df = self.df[self.df['city'] == city]
+        city_df = self.df[self.df["city"] == city]
 
         if len(city_df) == 0:
             return None
 
         # Calculate price per sqm
         price_per_sqm = None
-        if city_df['area_sqm'].notna().any():
-            valid_area = city_df[city_df['area_sqm'].notna()]
-            price_per_sqm = float((valid_area['price'] / valid_area['area_sqm']).mean())
+        if city_df["area_sqm"].notna().any():
+            valid_area = city_df[city_df["area_sqm"].notna()]
+            price_per_sqm = float((valid_area["price"] / valid_area["area_sqm"]).mean())
 
         # Most common room count
         most_common_rooms = None
-        if len(city_df['rooms']) > 0:
-            most_common_rooms = float(city_df['rooms'].mode().iloc[0]) if len(city_df['rooms'].mode()) > 0 else None
+        if len(city_df["rooms"]) > 0:
+            most_common_rooms = (
+                float(city_df["rooms"].mode().iloc[0]) if len(city_df["rooms"].mode()) > 0 else None
+            )
 
         # Amenity availability
         amenity_availability = {
-            'parking': float(city_df['has_parking'].mean() * 100),
-            'garden': float(city_df['has_garden'].mean() * 100),
-            'pool': float(city_df['has_pool'].mean() * 100),
-            'furnished': float(city_df['is_furnished'].mean() * 100),
-            'balcony': float(city_df['has_balcony'].mean() * 100),
-            'elevator': float(city_df['has_elevator'].mean() * 100),
+            "parking": float(city_df["has_parking"].mean() * 100),
+            "garden": float(city_df["has_garden"].mean() * 100),
+            "pool": float(city_df["has_pool"].mean() * 100),
+            "furnished": float(city_df["is_furnished"].mean() * 100),
+            "balcony": float(city_df["has_balcony"].mean() * 100),
+            "elevator": float(city_df["has_elevator"].mean() * 100),
         }
 
         # Price comparison to overall market
-        overall_avg = float(self.df['price'].mean())
-        city_avg = float(city_df['price'].mean())
+        overall_avg = float(self.df["price"].mean())
+        city_avg = float(city_df["price"].mean())
 
         if city_avg > overall_avg * 1.1:
             price_comparison = "above_average"
@@ -297,45 +323,47 @@ class MarketInsights:
             city=city,
             property_count=len(city_df),
             avg_price=city_avg,
-            median_price=float(city_df['price'].median()),
+            median_price=float(city_df["price"].median()),
             avg_price_per_sqm=price_per_sqm,
             most_common_room_count=most_common_rooms,
             amenity_availability=amenity_availability,
-            price_comparison=price_comparison
+            price_comparison=price_comparison,
         )
 
     def get_city_price_indices(self, cities: Optional[List[str]] = None) -> pd.DataFrame:
         """Compute basic price indices per city."""
         df = self.df.copy()
         if cities:
-            df = df[df['city'].isin(cities)]
-        group = df.groupby('city')
+            df = df[df["city"].isin(cities)]
+        group = df.groupby("city")
         res = group.agg(
-            avg_price=('price', 'mean'),
-            median_price=('price', 'median'),
-            count=('price', 'count')
+            avg_price=("price", "mean"), median_price=("price", "median"), count=("price", "count")
         ).reset_index()
-        if df['area_sqm'].notna().any():
-            res['avg_price_per_sqm'] = group.apply(lambda g: (g['price'] / g['area_sqm']).dropna().mean()).values
+        if df["area_sqm"].notna().any():
+            res["avg_price_per_sqm"] = group.apply(
+                lambda g: (g["price"] / g["area_sqm"]).dropna().mean()
+            ).values
         else:
-            res['avg_price_per_sqm'] = np.nan
+            res["avg_price_per_sqm"] = np.nan
         return res
 
-    def filter_by_geo_radius(self, center_lat: float, center_lon: float, radius_km: float) -> pd.DataFrame:
+    def filter_by_geo_radius(
+        self, center_lat: float, center_lon: float, radius_km: float
+    ) -> pd.DataFrame:
         """Filter properties within radius from a center point."""
         df = self.df.copy()
-        if df[['lat','lon']].isnull().any().any():
-            df = df.dropna(subset=['lat','lon'])
+        if df[["lat", "lon"]].isnull().any().any():
+            df = df.dropna(subset=["lat", "lon"])
         if len(df) == 0:
             return df
         lat1 = np.radians(center_lat)
         lon1 = np.radians(center_lon)
-        lat2 = np.radians(df['lat'].astype(float))
-        lon2 = np.radians(df['lon'].astype(float))
+        lat2 = np.radians(df["lat"].astype(float))
+        lon2 = np.radians(df["lon"].astype(float))
         dlat = lat2 - lat1
         dlon = lon2 - lon1
-        a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
-        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
+        a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
+        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
         earth_radius_km = 6371.0
         dist = earth_radius_km * c
         return df[dist <= radius_km]
@@ -363,10 +391,36 @@ class MarketInsights:
         energy_certs: Optional[List[str]] = None,
         require_coords: bool = True,
     ) -> pd.DataFrame:
+        """Filter the insights DataFrame using geo and attribute constraints.
+
+        Args:
+            center_lat: Optional latitude for radius filtering.
+            center_lon: Optional longitude for radius filtering.
+            radius_km: Optional radius (km) for geo filtering.
+            listing_type: Optional listing type filter ("rent" or "sale").
+            property_types: Optional allowed property types (case-insensitive).
+            min_price: Optional minimum price (inclusive).
+            max_price: Optional maximum price (inclusive).
+            min_price_per_sqm: Optional minimum price per sqm (inclusive).
+            max_price_per_sqm: Optional maximum price per sqm (inclusive).
+            min_rooms: Optional minimum rooms (inclusive).
+            max_rooms: Optional maximum rooms (inclusive).
+            must_have_parking: If True, keep only properties with parking.
+            must_have_elevator: If True, keep only properties with elevator.
+            must_have_balcony: If True, keep only properties with balcony.
+            must_be_furnished: If True, keep only furnished properties.
+            year_built_min: Optional minimum year built (inclusive).
+            year_built_max: Optional maximum year built (inclusive).
+            energy_certs: Optional allowed energy certificates (case-insensitive).
+            require_coords: If True, drop rows missing lat/lon before filtering.
+
+        Returns:
+            Filtered DataFrame (may be empty).
+        """
         df = self.df.copy()
 
         if require_coords and len(df) > 0:
-            df = df.dropna(subset=['lat', 'lon'])
+            df = df.dropna(subset=["lat", "lon"])
 
         if (
             center_lat is not None
@@ -411,7 +465,9 @@ class MarketInsights:
             price = pd.to_numeric(df["price"], errors="coerce")
             computed = price / area
             computed = computed.replace([np.inf, -np.inf], np.nan)
-            df.loc[df["price_per_sqm"].isna(), "price_per_sqm"] = computed.loc[df["price_per_sqm"].isna()]
+            df.loc[df["price_per_sqm"].isna(), "price_per_sqm"] = computed.loc[
+                df["price_per_sqm"].isna()
+            ]
 
         df["price_per_sqm"] = pd.to_numeric(df["price_per_sqm"], errors="coerce")
         if min_price_per_sqm is not None:
@@ -460,46 +516,50 @@ class MarketInsights:
         """
         df = self.df.copy()
         # Attach timestamps from original properties if missing in df
-        if 'scraped_at' not in df.columns:
+        if "scraped_at" not in df.columns:
             # Rebuild from properties list
             scraped = []
             for p in self.properties.properties:
-                scraped.append(getattr(p, 'scraped_at', None))
+                scraped.append(getattr(p, "scraped_at", None))
             # pad to length of df
             while len(scraped) < len(df):
                 scraped.append(None)
-            df['scraped_at'] = scraped[:len(df)]
-        if 'scraped_at' in df.columns and df['scraped_at'].isnull().all():
+            df["scraped_at"] = scraped[: len(df)]
+        if "scraped_at" in df.columns and df["scraped_at"].isnull().all():
             # fallback to last_updated
-            if 'last_updated' in df.columns:
-                df['scraped_at'] = df['last_updated']
+            if "last_updated" in df.columns:
+                df["scraped_at"] = df["last_updated"]
         # Drop rows without timestamps
-        df = df.dropna(subset=['scraped_at'])
+        df = df.dropna(subset=["scraped_at"])
         # Convert to pandas datetime
-        df['dt'] = pd.to_datetime(df['scraped_at'])
+        df["dt"] = pd.to_datetime(df["scraped_at"])
         if city:
-            df = df[df['city'] == city]
+            df = df[df["city"] == city]
         if len(df) == 0:
-            return pd.DataFrame(columns=['month', 'avg_price', 'median_price', 'count', 'yoy_pct'])
-        df['month'] = df['dt'].dt.to_period('M').dt.to_timestamp()
-        grouped = df.groupby('month', sort=True).agg(
-            avg_price=('price', 'mean'),
-            median_price=('price', 'median'),
-            count=('price', 'count')
-        ).reset_index()
+            return pd.DataFrame(columns=["month", "avg_price", "median_price", "count", "yoy_pct"])
+        df["month"] = df["dt"].dt.to_period("M").dt.to_timestamp()
+        grouped = (
+            df.groupby("month", sort=True)
+            .agg(
+                avg_price=("price", "mean"),
+                median_price=("price", "median"),
+                count=("price", "count"),
+            )
+            .reset_index()
+        )
         # YoY percent: compare same month last year using row-wise shift
-        grouped = grouped.sort_values('month')
-        prev = grouped['avg_price'].shift(12)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            grouped['yoy_pct'] = ((grouped['avg_price'] - prev) / prev) * 100
+        grouped = grouped.sort_values("month")
+        prev = grouped["avg_price"].shift(12)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            grouped["yoy_pct"] = ((grouped["avg_price"] - prev) / prev) * 100
         # Moving average
-        grouped['avg_price_ma'] = grouped['avg_price'].rolling(window=window, min_periods=1).mean()
+        grouped["avg_price_ma"] = grouped["avg_price"].rolling(window=window, min_periods=1).mean()
         # Anomalies via z-score
         if detect_anomalies and len(grouped) > 0:
-            mu = float(np.nanmean(grouped['avg_price']))
-            sd = float(np.nanstd(grouped['avg_price'])) or 1.0
-            grouped['zscore'] = (grouped['avg_price'] - mu) / sd
-            grouped['anomaly'] = grouped['zscore'].abs() >= z_threshold
+            mu = float(np.nanmean(grouped["avg_price"]))
+            sd = float(np.nanstd(grouped["avg_price"])) or 1.0
+            grouped["zscore"] = (grouped["avg_price"] - mu) / sd
+            grouped["anomaly"] = grouped["zscore"].abs() >= z_threshold
         return grouped
 
     def get_property_type_insights(self, property_type: str) -> Optional[PropertyTypeInsights]:
@@ -512,27 +572,27 @@ class MarketInsights:
         Returns:
             PropertyTypeInsights or None if type not found
         """
-        type_df = self.df[self.df['property_type'] == property_type]
+        type_df = self.df[self.df["property_type"] == property_type]
 
         if len(type_df) == 0:
             return None
 
         # Average area
         avg_area = None
-        if type_df['area_sqm'].notna().any():
-            avg_area = float(type_df['area_sqm'].mean())
+        if type_df["area_sqm"].notna().any():
+            avg_area = float(type_df["area_sqm"].mean())
 
         # Popular locations (top 3)
-        popular_locations = type_df['city'].value_counts().head(3).index.tolist()
+        popular_locations = type_df["city"].value_counts().head(3).index.tolist()
 
         return PropertyTypeInsights(
             property_type=property_type,
             count=len(type_df),
-            avg_price=float(type_df['price'].mean()),
-            median_price=float(type_df['price'].median()),
-            avg_rooms=float(type_df['rooms'].mean()),
+            avg_price=float(type_df["price"].mean()),
+            median_price=float(type_df["price"].median()),
+            avg_rooms=float(type_df["rooms"].mean()),
             avg_area=avg_area,
-            popular_locations=popular_locations
+            popular_locations=popular_locations,
         )
 
     def get_price_distribution(self, bins: int = 10) -> Dict[str, Any]:
@@ -545,15 +605,14 @@ class MarketInsights:
         Returns:
             Dictionary with histogram data
         """
-        hist, bin_edges = np.histogram(self.df['price'], bins=bins)
+        hist, bin_edges = np.histogram(self.df["price"], bins=bins)
 
         return {
-            'counts': hist.tolist(),
-            'bin_edges': bin_edges.tolist(),
-            'bins': [
-                f"${bin_edges[i]:.0f}-${bin_edges[i+1]:.0f}"
-                for i in range(len(bin_edges)-1)
-            ]
+            "counts": hist.tolist(),
+            "bin_edges": bin_edges.tolist(),
+            "bins": [
+                f"${bin_edges[i]:.0f}-${bin_edges[i+1]:.0f}" for i in range(len(bin_edges) - 1)
+            ],
         }
 
     def get_amenity_impact_on_price(self) -> Dict[str, float]:
@@ -563,17 +622,24 @@ class MarketInsights:
         Returns:
             Dictionary mapping amenity to average price difference (%)
         """
-        amenities = ['has_parking', 'has_garden', 'has_pool', 'is_furnished', 'has_balcony', 'has_elevator']
+        amenities = [
+            "has_parking",
+            "has_garden",
+            "has_pool",
+            "is_furnished",
+            "has_balcony",
+            "has_elevator",
+        ]
         impact = {}
 
         for amenity in amenities:
             mask = self.df[amenity].fillna(False).astype(bool)
-            with_amenity = self.df[mask]['price'].mean()
-            without_amenity = self.df[~mask]['price'].mean()
+            with_amenity = self.df[mask]["price"].mean()
+            without_amenity = self.df[~mask]["price"].mean()
 
             if pd.notna(with_amenity) and pd.notna(without_amenity) and without_amenity > 0:
                 percent_diff = float(((with_amenity - without_amenity) / without_amenity) * 100)
-                impact[amenity.replace('has_', '').replace('is_', '')] = percent_diff
+                impact[amenity.replace("has_", "").replace("is_", "")] = percent_diff
 
         return impact
 
@@ -594,29 +660,46 @@ class MarketInsights:
         df_with_score = self.df.copy()
 
         # Normalize price (lower is better)
-        price_norm = (df_with_score['price'].max() - df_with_score['price']) / (df_with_score['price'].max() - df_with_score['price'].min()) if df_with_score['price'].max() != df_with_score['price'].min() else 0.5
+        price_norm = (
+            (df_with_score["price"].max() - df_with_score["price"])
+            / (df_with_score["price"].max() - df_with_score["price"].min())
+            if df_with_score["price"].max() != df_with_score["price"].min()
+            else 0.5
+        )
 
         # Normalize rooms (higher is better)
-        rooms_norm = (df_with_score['rooms'] - df_with_score['rooms'].min()) / (df_with_score['rooms'].max() - df_with_score['rooms'].min()) if df_with_score['rooms'].max() != df_with_score['rooms'].min() else 0.5
+        rooms_norm = (
+            (df_with_score["rooms"] - df_with_score["rooms"].min())
+            / (df_with_score["rooms"].max() - df_with_score["rooms"].min())
+            if df_with_score["rooms"].max() != df_with_score["rooms"].min()
+            else 0.5
+        )
 
         # Count amenities
-        amenity_cols = ['has_parking', 'has_garden', 'has_pool', 'is_furnished', 'has_balcony', 'has_elevator']
-        df_with_score['amenity_count'] = df_with_score[amenity_cols].sum(axis=1)
-        amenity_norm = df_with_score['amenity_count'] / 6  # 6 total amenities
+        amenity_cols = [
+            "has_parking",
+            "has_garden",
+            "has_pool",
+            "is_furnished",
+            "has_balcony",
+            "has_elevator",
+        ]
+        df_with_score["amenity_count"] = df_with_score[amenity_cols].sum(axis=1)
+        amenity_norm = df_with_score["amenity_count"] / 6  # 6 total amenities
 
         # Calculate value score (weighted combination)
-        df_with_score['value_score'] = (
-            price_norm * 0.4 +  # 40% weight on low price
-            rooms_norm * 0.3 +  # 30% weight on rooms
-            amenity_norm * 0.3  # 30% weight on amenities
+        df_with_score["value_score"] = (
+            price_norm * 0.4  # 40% weight on low price
+            + rooms_norm * 0.3  # 30% weight on rooms
+            + amenity_norm * 0.3  # 30% weight on amenities
         )
 
         # Get top properties
-        top_properties = df_with_score.nlargest(top_n, 'value_score')
+        top_properties = df_with_score.nlargest(top_n, "value_score")
 
         records = top_properties[
-            ['city', 'price', 'rooms', 'property_type', 'amenity_count', 'value_score']
-        ].to_dict('records')
+            ["city", "price", "rooms", "property_type", "amenity_count", "value_score"]
+        ].to_dict("records")
         if isinstance(records, list):
             return [r for r in records if isinstance(r, dict)]
         return []
@@ -636,46 +719,50 @@ class MarketInsights:
         insights2 = self.get_location_insights(city2)
 
         if insights1 is None or insights2 is None:
-            return {
-                'error': 'One or both cities not found',
-                'city1': city1,
-                'city2': city2
-            }
+            return {"error": "One or both cities not found", "city1": city1, "city2": city2}
 
         return {
-            'city1': insights1.dict(),
-            'city2': insights2.dict(),
-            'price_difference': insights1.avg_price - insights2.avg_price,
-            'price_difference_percent': ((insights1.avg_price - insights2.avg_price) / insights2.avg_price) * 100,
-            'cheaper_city': city1 if insights1.avg_price < insights2.avg_price else city2,
-            'more_properties': city1 if insights1.property_count > insights2.property_count else city2
+            "city1": insights1.dict(),
+            "city2": insights2.dict(),
+            "price_difference": insights1.avg_price - insights2.avg_price,
+            "price_difference_percent": (
+                (insights1.avg_price - insights2.avg_price) / insights2.avg_price
+            )
+            * 100,
+            "cheaper_city": city1 if insights1.avg_price < insights2.avg_price else city2,
+            "more_properties": (
+                city1 if insights1.property_count > insights2.property_count else city2
+            ),
         }
+
     def get_cities_yoy(self, cities: Optional[List[str]] = None) -> pd.DataFrame:
         df = self.df.copy()
         if cities:
-            df = df[df['city'].isin(cities)]
-        if 'scraped_at' not in df.columns:
+            df = df[df["city"].isin(cities)]
+        if "scraped_at" not in df.columns:
             scraped = []
             for p in self.properties.properties:
-                scraped.append(getattr(p, 'scraped_at', None))
+                scraped.append(getattr(p, "scraped_at", None))
             while len(scraped) < len(df):
                 scraped.append(None)
-            df['scraped_at'] = scraped[:len(df)]
-        df = df.dropna(subset=['scraped_at'])
+            df["scraped_at"] = scraped[: len(df)]
+        df = df.dropna(subset=["scraped_at"])
         if len(df) == 0:
-            return pd.DataFrame(columns=['city','month','avg_price','yoy_pct','count'])
-        df['dt'] = pd.to_datetime(df['scraped_at'])
-        df['month'] = df['dt'].dt.to_period('M').dt.to_timestamp()
-        grouped = df.groupby(['city','month']).agg(
-            avg_price=('price','mean'),
-            count=('price','count')
-        ).reset_index().sort_values(['city','month'])
-        grouped['yoy_pct'] = None
+            return pd.DataFrame(columns=["city", "month", "avg_price", "yoy_pct", "count"])
+        df["dt"] = pd.to_datetime(df["scraped_at"])
+        df["month"] = df["dt"].dt.to_period("M").dt.to_timestamp()
+        grouped = (
+            df.groupby(["city", "month"])
+            .agg(avg_price=("price", "mean"), count=("price", "count"))
+            .reset_index()
+            .sort_values(["city", "month"])
+        )
+        grouped["yoy_pct"] = None
         try:
-            grouped['yoy_pct'] = (
-                grouped.groupby('city')['avg_price'].transform(lambda s: (s - s.shift(12)) / s.shift(12) * 100)
+            grouped["yoy_pct"] = grouped.groupby("city")["avg_price"].transform(
+                lambda s: (s - s.shift(12)) / s.shift(12) * 100
             )
         except Exception:
             pass
-        latest = grouped.groupby('city').tail(1)
-        return latest[['city','month','avg_price','yoy_pct','count']]
+        latest = grouped.groupby("city").tail(1)
+        return latest[["city", "month", "avg_price", "yoy_pct", "count"]]

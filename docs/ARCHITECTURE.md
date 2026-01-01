@@ -20,7 +20,7 @@
 
 ## Key Data Flows
 - Data load → embeddings → ChromaDB persist → hybrid retrieval → rerank → response
-- Expert Panel → retrieval filters (geo radius, listing type, price, sort) + indices/time‑series → export digest
+- Expert Panel → map filters (geo radius, price/rooms/amenities, neutral states) + retrieval filters (listing type, price, sort) + indices/time‑series → export digest
 
 ---
 

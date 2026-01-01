@@ -1,5 +1,5 @@
-from ui.geo_viz import get_property_coords
-from data.schemas import Property
+from data.schemas import Property, PropertyCollection
+from ui.geo_viz import create_property_map, get_property_coords
 
 
 def test_get_property_coords_prefers_lat_lon():
@@ -16,3 +16,8 @@ def test_get_property_coords_falls_back_to_city_center():
     assert abs(lat - 50.0647) < 0.1
     assert abs(lon - 19.9450) < 0.1
 
+
+def test_create_property_map_empty_collection_returns_map():
+    coll = PropertyCollection(properties=[], total_count=0)
+    m = create_property_map(coll, center_city="Warsaw", jitter=False)
+    assert m is not None

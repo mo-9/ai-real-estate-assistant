@@ -3,9 +3,9 @@ from unittest.mock import patch
 from langchain_core.documents import Document
 
 from ai.app_services import create_property_retriever
-from vector_store.chroma_store import ChromaPropertyStore
 from analytics.market_insights import MarketInsights
-from data.schemas import Property, PropertyCollection, PropertyType, ListingType
+from data.schemas import ListingType, Property, PropertyCollection, PropertyType
+from vector_store.chroma_store import ChromaPropertyStore
 
 
 def test_property_retriever_forced_listing_type_filters_results(tmp_path, monkeypatch):
@@ -211,3 +211,36 @@ def test_market_insights_filter_properties_end_to_end():
         must_be_furnished=True,
     )
     assert df["id"].tolist() == ["p2"]
+
+
+def test_market_insights_filter_properties_handles_missing_coords_with_require_coords():
+    properties = [
+        Property(
+            id="p1",
+            city="Warsaw",
+            price=1000,
+            area_sqm=50,
+            rooms=2,
+            property_type=PropertyType.APARTMENT,
+            listing_type=ListingType.RENT,
+            latitude=52.23,
+            longitude=21.01,
+        ),
+        Property(
+            id="p2",
+            city="Warsaw",
+            price=1200,
+            area_sqm=60,
+            rooms=2,
+            property_type=PropertyType.APARTMENT,
+            listing_type=ListingType.RENT,
+        ),
+    ]
+    coll = PropertyCollection(properties=properties, total_count=len(properties))
+    insights = MarketInsights(coll)
+
+    required_df = insights.filter_properties(require_coords=True)
+    assert required_df["id"].tolist() == ["p1"]
+
+    optional_df = insights.filter_properties(require_coords=False)
+    assert set(optional_df["id"].tolist()) == {"p1", "p2"}

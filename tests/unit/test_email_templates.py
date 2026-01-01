@@ -1,11 +1,11 @@
-from notifications.email_templates import (
-    PriceDropTemplate,
-    NewPropertyTemplate,
-    DigestTemplate,
-    TestEmailTemplate,
-    MarketUpdateTemplate,
-)
 from data.schemas import Property, PropertyType
+from notifications.email_templates import (
+    DigestTemplate,
+    MarketUpdateTemplate,
+    NewPropertyTemplate,
+    PriceDropTemplate,
+    TestEmailTemplate,
+)
 
 
 def make_prop(pid: str, city: str, price: float, rooms: float) -> Property:
@@ -46,9 +46,7 @@ def test_new_property_template_render_multiple():
         make_prop("p2", "Warsaw", 1200, 3),
         make_prop("p3", "Gdansk", 800, 2),
     ]
-    subject, html = NewPropertyTemplate.render(
-        "Family Flats", props, max_display=2, user_name="Alex"
-    )
+    subject, html = NewPropertyTemplate.render("Family Flats", props, max_display=2, user_name="Alex")
     assert "New Properties" in subject
     assert "Family Flats" in subject
     assert "and 1 more" in html

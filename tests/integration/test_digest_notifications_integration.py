@@ -12,8 +12,8 @@ from notifications import (
     NotificationHistory,
     NotificationPreferencesManager,
 )
-from notifications.notification_preferences import DigestScheduler
 from notifications.notification_preferences import AlertType as PrefAlertType
+from notifications.notification_preferences import DigestScheduler
 from utils.saved_searches import SavedSearchManager
 
 
@@ -24,9 +24,7 @@ def scheduler_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     cache_dir = tmp_path / "app_cache"
     monkeypatch.setattr(property_cache, "CACHE_DIR", cache_dir)
     monkeypatch.setattr(property_cache, "CACHE_FILE", cache_dir / "properties.json")
-    monkeypatch.setattr(
-        property_cache, "PREV_CACHE_FILE", cache_dir / "properties_prev.json"
-    )
+    monkeypatch.setattr(property_cache, "PREV_CACHE_FILE", cache_dir / "properties_prev.json")
 
     prefs_manager = NotificationPreferencesManager(storage_path=str(tmp_path / "prefs"))
     history = NotificationHistory(storage_path=str(tmp_path / "history"))

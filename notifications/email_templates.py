@@ -20,15 +20,15 @@ class EmailTemplate:
 
     # Common color scheme
     COLORS = {
-        'primary': '#1f77b4',
-        'success': '#2ca02c',
-        'warning': '#ff7f0e',
-        'danger': '#d62728',
-        'text': '#333333',
-        'text_light': '#666666',
-        'background': '#f8f9fa',
-        'white': '#ffffff',
-        'border': '#e0e0e0'
+        "primary": "#1f77b4",
+        "success": "#2ca02c",
+        "warning": "#ff7f0e",
+        "danger": "#d62728",
+        "text": "#333333",
+        "text_light": "#666666",
+        "background": "#f8f9fa",
+        "white": "#ffffff",
+        "border": "#e0e0e0",
     }
 
     @staticmethod
@@ -148,7 +148,7 @@ class EmailTemplate:
     @staticmethod
     def _property_card(prop: Property, highlight_color: Optional[str] = None) -> str:
         """Generate HTML card for a property."""
-        border_color = highlight_color or EmailTemplate.COLORS['border']
+        border_color = highlight_color or EmailTemplate.COLORS["border"]
 
         area_text = f"{prop.area_sqm} sqm" if prop.area_sqm else "Area not specified"
 
@@ -179,8 +179,7 @@ class PriceDropTemplate(EmailTemplate):
 
     @staticmethod
     def render(
-        property_info: Dict[str, Any],
-        user_name: Optional[str] = None
+        property_info: Dict[str, Any], user_name: Optional[str] = None
     ) -> tuple[str, str]:
         """
         Render price drop alert email.
@@ -192,11 +191,11 @@ class PriceDropTemplate(EmailTemplate):
         Returns:
             Tuple of (subject, html_body)
         """
-        prop = property_info['property']
-        old_price = property_info['old_price']
-        new_price = property_info['new_price']
-        percent_drop = property_info['percent_drop']
-        savings = property_info['savings']
+        prop = property_info["property"]
+        old_price = property_info["old_price"]
+        new_price = property_info["new_price"]
+        percent_drop = property_info["percent_drop"]
+        savings = property_info["savings"]
 
         greeting = f"Hi {user_name}," if user_name else "Hello,"
 
@@ -260,7 +259,7 @@ class NewPropertyTemplate(EmailTemplate):
         search_name: str,
         properties: List[Property],
         max_display: int = 5,
-        user_name: Optional[str] = None
+        user_name: Optional[str] = None,
     ) -> tuple[str, str]:
         """
         Render new property matches email.
@@ -282,7 +281,9 @@ class NewPropertyTemplate(EmailTemplate):
         # Build property cards HTML
         properties_html = ""
         for prop in properties[:max_display]:
-            properties_html += EmailTemplate._property_card(prop, EmailTemplate.COLORS['primary'])
+            properties_html += EmailTemplate._property_card(
+                prop, EmailTemplate.COLORS["primary"]
+            )
 
         if len(properties) > max_display:
             remaining = len(properties) - max_display
@@ -323,7 +324,7 @@ class DigestTemplate(EmailTemplate):
     def render(
         digest_type: str,  # 'daily' or 'weekly'
         data: Dict[str, Any],
-        user_name: Optional[str] = None
+        user_name: Optional[str] = None,
     ) -> tuple[str, str]:
         """
         Render digest email.
@@ -343,13 +344,156 @@ class DigestTemplate(EmailTemplate):
         subject = f"📊 Your {period} Real Estate Digest - {date_str}"
 
         # Extract data with defaults
-        new_properties = data.get('new_properties', 0)
-        price_drops = data.get('price_drops', 0)
-        avg_price = data.get('avg_price', 0)
-        total_properties = data.get('total_properties', 0)
-        average_price = data.get('average_price', 0)
-        trending_cities = data.get('trending_cities', [])
-        saved_searches = data.get('saved_searches', [])
+        new_properties = data.get("new_properties", 0)
+        price_drops = data.get("price_drops", 0)
+        avg_price = data.get("avg_price", 0)
+        total_properties = data.get("total_properties", 0)
+        average_price = data.get("average_price", 0)
+        trending_cities = data.get("trending_cities", [])
+        saved_searches = data.get("saved_searches", [])
+        top_picks = data.get("top_picks", []) or []
+        price_drop_properties = data.get("price_drop_properties", []) or []
+        expert = data.get("expert")
+
+        def _fmt_money(amount: Any, currency: Any) -> str:
+            if amount is None:
+                return "—"
+            try:
+                if currency:
+                    return f"{float(amount):,.0f} {currency}"
+            except Exception:
+                pass
+            try:
+                return f"${float(amount):,.0f}"
+            except Exception:
+                return str(amount)
+
+        def _fmt_number(v: Any) -> str:
+            if v is None:
+                return "—"
+            try:
+                if float(v).is_integer():
+                    return str(int(float(v)))
+                return f"{float(v):.1f}"
+            except Exception:
+                return str(v)
+
+        def _render_property_cards(items: List[Dict[str, Any]]) -> str:
+            cards = ""
+            for p in items[:5]:
+                city = p.get("city") or "Unknown"
+                district = p.get("district")
+                title = p.get("title")
+                price = _fmt_money(p.get("price"), p.get("currency"))
+                rooms = _fmt_number(p.get("rooms"))
+                baths = _fmt_number(p.get("bathrooms"))
+                area = _fmt_number(p.get("area_sqm"))
+                price_per_sqm = p.get("price_per_sqm")
+                pps = (
+                    f"{_fmt_money(price_per_sqm, p.get('currency'))}/m²"
+                    if price_per_sqm is not None
+                    else None
+                )
+                prop_type = p.get("property_type")
+                listing_type = p.get("listing_type")
+
+                amenity_bits = []
+                if p.get("has_parking"):
+                    amenity_bits.append("Parking")
+                if p.get("has_elevator"):
+                    amenity_bits.append("Elevator")
+                if p.get("has_balcony"):
+                    amenity_bits.append("Balcony")
+                if p.get("is_furnished"):
+                    amenity_bits.append("Furnished")
+                amenities = ", ".join(amenity_bits) if amenity_bits else None
+
+                meta_bits = []
+                if prop_type:
+                    meta_bits.append(str(prop_type).title())
+                if listing_type:
+                    meta_bits.append(str(listing_type).title())
+                meta = " • ".join(meta_bits) if meta_bits else ""
+
+                location = f"{city}{f' — {district}' if district else ''}"
+                headline = title if title else location
+                subline_bits = [meta] if meta else []
+                subline_bits.append(f"{rooms} rooms • {baths} baths")
+                if area != "—":
+                    subline_bits.append(f"{area} m²")
+                if pps:
+                    subline_bits.append(pps)
+                subline = " | ".join([b for b in subline_bits if b])
+
+                url = p.get("source_url")
+                link_style = (
+                    f"color: {EmailTemplate.COLORS['primary']}; text-decoration: none;"
+                )
+                cta = (
+                    f'<a href="{url}" style="{link_style}">View listing</a>'
+                    if url
+                    else ""
+                )
+
+                amenity_style = (
+                    f"margin: 6px 0 0 0; color: {EmailTemplate.COLORS['text_light']}; "
+                    "font-size: 13px;"
+                )
+                amenities_html = (
+                    f'<p style="{amenity_style}">{amenities}</p>' if amenities else ""
+                )
+
+                cards += f"""
+    <div style="background-color: {EmailTemplate.COLORS['white']}; padding: 15px; border-radius: 8px; margin: 12px 0;
+         border: 1px solid {EmailTemplate.COLORS['border']};">
+        <div style="display: flex; justify-content: space-between; gap: 10px; align-items: baseline;">
+            <div style="font-weight: 600;">{headline}</div>
+            <div style="font-weight: 700; color: {EmailTemplate.COLORS['primary']}; white-space: nowrap;">{price}</div>
+        </div>
+        <div style="margin-top: 6px; color: {EmailTemplate.COLORS['text_light']}; font-size: 14px;">
+            {subline}
+        </div>
+        {amenities_html}
+        <div style="margin-top: 10px;">{cta}</div>
+    </div>
+"""
+            return cards
+
+        def _render_expert_table(title: str, rows: List[Dict[str, Any]]) -> str:
+            if not rows:
+                return ""
+            cols = list(rows[0].keys())
+            th_style = (
+                "text-align: left; padding: 8px; border-bottom: 1px solid "
+                f"{EmailTemplate.COLORS['border']};"
+            )
+            header = "".join([f'<th style="{th_style}">{c}</th>' for c in cols])
+            body_rows = ""
+            td_style = f"padding: 8px; border-bottom: 1px solid {EmailTemplate.COLORS['border']};"
+            for r in rows[:10]:
+                tds = []
+                for c in cols:
+                    v = r.get(c)
+                    if isinstance(v, float):
+                        tds.append(f"{v:.2f}")
+                    else:
+                        tds.append(str(v) if v is not None else "—")
+                body_rows += (
+                    "<tr>"
+                    + "".join([f'<td style="{td_style}">{cell}</td>' for cell in tds])
+                    + "</tr>"
+                )
+            return f"""
+<div style="margin: 25px 0;">
+    <h3>📌 {title}</h3>
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead><tr>{header}</tr></thead>
+            <tbody>{body_rows}</tbody>
+        </table>
+    </div>
+</div>
+"""
 
         content = f"""
 <h2 style="color: {EmailTemplate.COLORS['primary']};">📊 {period} Real Estate Digest</h2>
@@ -361,21 +505,24 @@ class DigestTemplate(EmailTemplate):
 
     <div style="display: flex; justify-content: space-around; flex-wrap: wrap; margin: 20px 0;">
         <div style="text-align: center; margin: 15px; min-width: 120px;">
-            <div style="font-size: 36px; font-weight: bold; color: {EmailTemplate.COLORS['primary']}; margin-bottom: 5px;">
+            <div style="font-size: 36px; font-weight: bold; color: {EmailTemplate.COLORS['primary']};
+                 margin-bottom: 5px;">
                 {new_properties}
             </div>
             <div style="color: {EmailTemplate.COLORS['text_light']};">New Properties</div>
         </div>
 
         <div style="text-align: center; margin: 15px; min-width: 120px;">
-            <div style="font-size: 36px; font-weight: bold; color: {EmailTemplate.COLORS['success']}; margin-bottom: 5px;">
+            <div style="font-size: 36px; font-weight: bold; color: {EmailTemplate.COLORS['success']};
+                 margin-bottom: 5px;">
                 {price_drops}
             </div>
             <div style="color: {EmailTemplate.COLORS['text_light']};">Price Drops</div>
         </div>
 
         <div style="text-align: center; margin: 15px; min-width: 120px;">
-            <div style="font-size: 36px; font-weight: bold; color: {EmailTemplate.COLORS['warning']}; margin-bottom: 5px;">
+            <div style="font-size: 36px; font-weight: bold; color: {EmailTemplate.COLORS['warning']};
+                 margin-bottom: 5px;">
                 ${avg_price:,.0f}
             </div>
             <div style="color: {EmailTemplate.COLORS['text_light']};">Avg Price</div>
@@ -410,9 +557,13 @@ class DigestTemplate(EmailTemplate):
     <h3>🔔 Your Saved Searches</h3>
 """
             for search in saved_searches:
-                search_name = search.get('name', 'Unnamed Search')
-                new_matches = search.get('new_matches', 0)
-                match_color = EmailTemplate.COLORS['success'] if new_matches > 0 else EmailTemplate.COLORS['text_light']
+                search_name = search.get("name", "Unnamed Search")
+                new_matches = search.get("new_matches", 0)
+                match_color = (
+                    EmailTemplate.COLORS["success"]
+                    if new_matches > 0
+                    else EmailTemplate.COLORS["text_light"]
+                )
 
                 content += f"""
     <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 10px 0;
@@ -424,6 +575,64 @@ class DigestTemplate(EmailTemplate):
     </div>
 """
             content += "</div>\n"
+
+        if top_picks:
+            content += """
+<div style="margin: 25px 0;">
+    <h3>🏆 Top Picks</h3>
+"""
+            content += _render_property_cards(top_picks)
+            content += "</div>\n"
+
+        if price_drop_properties:
+            content += """
+<div style="margin: 25px 0;">
+    <h3>💸 Biggest Price Drops</h3>
+"""
+            drops_cards = ""
+            for item in price_drop_properties[:5]:
+                p = item.get("property") or {}
+                city = p.get("city") or "Unknown"
+                price_old = _fmt_money(item.get("old_price"), p.get("currency"))
+                price_new = _fmt_money(item.get("new_price"), p.get("currency"))
+                pct = item.get("percent_drop")
+                pct_str = f"{float(pct):.1f}%" if pct is not None else "—"
+                p_cards = _render_property_cards([p])
+                drops_cards += f"""
+    <div style="margin: 0 0 10px 0;">
+        <div style="margin-bottom: 6px; color: {EmailTemplate.COLORS['text_light']};
+             font-size: 13px;">
+            {city}: {price_old} →
+            <span style="color: {EmailTemplate.COLORS['success']}; font-weight: 700;">
+                {price_new}
+            </span>
+            (<span style="color: {EmailTemplate.COLORS['success']}; font-weight: 700;">-{pct_str}</span>)
+        </div>
+        {p_cards}
+    </div>
+"""
+            content += drops_cards
+            content += "</div>\n"
+
+        if digest_type == "weekly" and expert:
+            city_indices = (
+                expert.get("city_indices") if isinstance(expert, dict) else []
+            )
+            yoy_up = expert.get("yoy_top_up") if isinstance(expert, dict) else []
+            yoy_down = expert.get("yoy_top_down") if isinstance(expert, dict) else []
+            content += """
+<div style="margin: 30px 0; padding-top: 10px; border-top: 1px solid {border};">
+    <h2 style="color: {primary}; margin-top: 0;">🧠 Expert Digest</h2>
+</div>
+""".format(
+                border=EmailTemplate.COLORS["border"],
+                primary=EmailTemplate.COLORS["primary"],
+            )
+            content += _render_expert_table(
+                "City Price Indices (Top 10)", city_indices or []
+            )
+            content += _render_expert_table("YoY — Top Gainers", yoy_up or [])
+            content += _render_expert_table("YoY — Top Decliners", yoy_down or [])
 
         content += f"""
 <div style="text-align: center; margin: 30px 0;">
@@ -489,8 +698,7 @@ class MarketUpdateTemplate(EmailTemplate):
 
     @staticmethod
     def render(
-        update_data: Dict[str, Any],
-        user_name: Optional[str] = None
+        update_data: Dict[str, Any], user_name: Optional[str] = None
     ) -> tuple[str, str]:
         """
         Render market update email.
@@ -506,9 +714,9 @@ class MarketUpdateTemplate(EmailTemplate):
 
         subject = "📈 Market Update - Real Estate Insights"
 
-        update_title = update_data.get('title', 'Market Update')
-        summary = update_data.get('summary', 'Latest market insights and trends.')
-        insights = update_data.get('insights', [])
+        update_title = update_data.get("title", "Market Update")
+        summary = update_data.get("summary", "Latest market insights and trends.")
+        insights = update_data.get("insights", [])
 
         content = f"""
 <h2 style="color: {EmailTemplate.COLORS['primary']};">📈 {update_title}</h2>
@@ -520,8 +728,8 @@ class MarketUpdateTemplate(EmailTemplate):
 """
 
         for insight in insights:
-            icon = insight.get('icon', '•')
-            text = insight.get('text', '')
+            icon = insight.get("icon", "•")
+            text = insight.get("text", "")
             content += f"    <p>{icon} {text}</p>\n"
 
         content += """

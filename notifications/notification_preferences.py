@@ -8,22 +8,22 @@ Handles:
 - Per-search notification settings
 """
 
+import json
 import logging
-from typing import List, Dict, Any, Optional, Set
-from dataclasses import dataclass, field, asdict
+import threading
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-import json
 from pathlib import Path
-import threading
+from typing import Any, Dict, List, Optional, Set
 
 from analytics import MarketInsights
 from notifications.alert_manager import AlertManager
 from notifications.email_service import EmailService
 from notifications.notification_history import (
     NotificationHistory,
-    NotificationType,
     NotificationStatus,
+    NotificationType,
 )
 from utils.property_cache import load_collection, load_previous_collection
 from utils.saved_searches import SavedSearchManager
@@ -196,9 +196,7 @@ class NotificationPreferences:
             return False
 
         # Respect quiet hours only for non-instant delivery modes
-        if self.alert_frequency != AlertFrequency.INSTANT and self.is_in_quiet_hours(
-            check_time
-        ):
+        if self.alert_frequency != AlertFrequency.INSTANT and self.is_in_quiet_hours(check_time):
             return False
 
         # Check daily limit
@@ -251,9 +249,7 @@ class NotificationPreferences:
             self.per_search_settings[search_id]["enabled"] = enabled
 
         if alert_frequency is not None:
-            self.per_search_settings[search_id][
-                "alert_frequency"
-            ] = alert_frequency.value
+            self.per_search_settings[search_id]["alert_frequency"] = alert_frequency.value
 
         if price_threshold is not None:
             self.per_search_settings[search_id]["price_threshold"] = price_threshold
@@ -354,9 +350,7 @@ class NotificationPreferencesManager:
         """
         return list(self._preferences_cache.values())
 
-    def get_users_by_frequency(
-        self, frequency: AlertFrequency
-    ) -> List[NotificationPreferences]:
+    def get_users_by_frequency(self, frequency: AlertFrequency) -> List[NotificationPreferences]:
         """
         Get all users with a specific alert frequency.
 
@@ -367,14 +361,10 @@ class NotificationPreferencesManager:
             List of user preferences matching frequency
         """
         return [
-            prefs
-            for prefs in self._preferences_cache.values()
-            if prefs.alert_frequency == frequency and prefs.enabled
+            prefs for prefs in self._preferences_cache.values() if prefs.alert_frequency == frequency and prefs.enabled
         ]
 
-    def get_users_with_alert_enabled(
-        self, alert_type: AlertType
-    ) -> List[NotificationPreferences]:
+    def get_users_with_alert_enabled(self, alert_type: AlertType) -> List[NotificationPreferences]:
         """
         Get all users who have a specific alert type enabled.
 
@@ -384,11 +374,7 @@ class NotificationPreferencesManager:
         Returns:
             List of user preferences with alert enabled
         """
-        return [
-            prefs
-            for prefs in self._preferences_cache.values()
-            if prefs.is_alert_enabled(alert_type)
-        ]
+        return [prefs for prefs in self._preferences_cache.values() if prefs.is_alert_enabled(alert_type)]
 
     def _load_all_preferences(self):
         """Load all preferences from disk."""
@@ -408,9 +394,7 @@ class NotificationPreferencesManager:
 
     def _save_all_preferences(self):
         """Save all preferences to disk."""
-        data = {
-            email: prefs.to_dict() for email, prefs in self._preferences_cache.items()
-        }
+        data = {email: prefs.to_dict() for email, prefs in self._preferences_cache.items()}
 
         with open(self.preferences_file, "w") as f:
             json.dump(data, f, indent=2)
@@ -431,9 +415,7 @@ class NotificationPreferencesManager:
 
         alert_type_counts = {}
         for alert_type in AlertType:
-            alert_type_counts[alert_type.value] = len(
-                self.get_users_with_alert_enabled(alert_type)
-            )
+            alert_type_counts[alert_type.value] = len(self.get_users_with_alert_enabled(alert_type))
 
         return {
             "total_users": total_users,
@@ -497,9 +479,7 @@ class DigestScheduler:
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._run_loop, daemon=True, name="DigestScheduler"
-        )
+        self._thread = threading.Thread(target=self._run_loop, daemon=True, name="DigestScheduler")
         self._thread.start()
 
     def stop(self, timeout_seconds: float = 2.0) -> None:
@@ -539,18 +519,14 @@ class DigestScheduler:
 
     def _send_due(self, frequency: AlertFrequency, now: datetime) -> int:
         sent_count = 0
-        am = AlertManager(
-            email_service=self._email_service, storage_path=self._storage_path_alerts
-        )
+        am = AlertManager(email_service=self._email_service, storage_path=self._storage_path_alerts)
         users = self._prefs_manager.get_users_by_frequency(frequency)
         for prefs in users:
             record_id: Optional[str] = None
             try:
                 if not self._is_time_match(prefs, now, frequency):
                     continue
-                if not prefs.should_send_alert(
-                    AlertType.DIGEST, alerts_sent_today=0, check_time=now
-                ):
+                if not prefs.should_send_alert(AlertType.DIGEST, alerts_sent_today=0, check_time=now):
                     continue
 
                 notification_type = (
@@ -564,9 +540,7 @@ class DigestScheduler:
                     continue
                 self._last_attempt_minute[attempt_key] = minute_key
 
-                if self._was_notification_sent_today(
-                    prefs.user_email, notification_type, now
-                ):
+                if self._was_notification_sent_today(prefs.user_email, notification_type, now):
                     continue
 
                 digest_type = "daily" if frequency == AlertFrequency.DAILY else "weekly"
@@ -593,15 +567,11 @@ class DigestScheduler:
                     self._history.mark_sent(record.id)
                     sent_count += 1
                 else:
-                    self._history.mark_failed(
-                        record.id, "Digest send returned False", add_to_retry_queue=True
-                    )
+                    self._history.mark_failed(record.id, "Digest send returned False", add_to_retry_queue=True)
             except Exception as e:
                 if record_id:
                     try:
-                        self._history.mark_failed(
-                            record_id, str(e), add_to_retry_queue=True
-                        )
+                        self._history.mark_failed(record_id, str(e), add_to_retry_queue=True)
                     except Exception:
                         pass
                 logger.warning(
@@ -611,9 +581,7 @@ class DigestScheduler:
                 )
         return sent_count
 
-    def _is_time_match(
-        self, prefs: NotificationPreferences, now: datetime, frequency: AlertFrequency
-    ) -> bool:
+    def _is_time_match(self, prefs: NotificationPreferences, now: datetime, frequency: AlertFrequency) -> bool:
         try:
             target_time = datetime.strptime(prefs.daily_digest_time, "%H:%M").time()
         except Exception:
@@ -628,12 +596,8 @@ class DigestScheduler:
 
         return True
 
-    def _was_notification_sent_today(
-        self, user_email: str, notification_type: NotificationType, now: datetime
-    ) -> bool:
-        records = self._history.get_user_notifications(
-            user_email, notification_type=notification_type
-        )
+    def _was_notification_sent_today(self, user_email: str, notification_type: NotificationType, now: datetime) -> bool:
+        records = self._history.get_user_notifications(user_email, notification_type=notification_type)
         sent_statuses = {
             NotificationStatus.SENT,
             NotificationStatus.DELIVERED,
@@ -645,9 +609,7 @@ class DigestScheduler:
                 return True
         return False
 
-    def _build_digest_data(
-        self, prefs: NotificationPreferences, now: datetime, *, digest_type: str
-    ) -> Dict[str, Any]:
+    def _build_digest_data(self, prefs: NotificationPreferences, now: datetime, *, digest_type: str) -> Dict[str, Any]:
         current = load_collection()
         previous = load_previous_collection()
         if current is None:
@@ -674,16 +636,9 @@ class DigestScheduler:
             if not city:
                 continue
             city_counts[city] = city_counts.get(city, 0) + 1
-        trending_cities = [
-            c
-            for c, _ in sorted(city_counts.items(), key=lambda kv: kv[1], reverse=True)[
-                :5
-            ]
-        ]
+        trending_cities = [c for c, _ in sorted(city_counts.items(), key=lambda kv: kv[1], reverse=True)[:5]]
 
-        am = AlertManager(
-            email_service=self._email_service, storage_path=self._storage_path_alerts
-        )
+        am = AlertManager(email_service=self._email_service, storage_path=self._storage_path_alerts)
 
         new_props = []
         if previous is not None:
@@ -695,13 +650,9 @@ class DigestScheduler:
         price_drop_entries: List[Dict[str, Any]] = []
         price_drop_total = 0
         if previous is not None:
-            drops = am.check_price_drops(
-                current, previous, threshold_percent=prefs.price_drop_threshold
-            )
+            drops = am.check_price_drops(current, previous, threshold_percent=prefs.price_drop_threshold)
             price_drop_total = len(drops)
-            drops_sorted = sorted(
-                drops, key=lambda d: d.get("percent_drop", 0), reverse=True
-            )
+            drops_sorted = sorted(drops, key=lambda d: d.get("percent_drop", 0), reverse=True)
             for d in drops_sorted[:5]:
                 prop = d.get("property")
                 if prop is None:
@@ -723,9 +674,7 @@ class DigestScheduler:
             for p in new_props:
                 if s.matches(p.model_dump()):
                     new_matches += 1
-            saved_search_summaries.append(
-                {"id": s.id, "name": s.name, "new_matches": new_matches}
-            )
+            saved_search_summaries.append({"id": s.id, "name": s.name, "new_matches": new_matches})
 
         top_pick_candidates = new_props if new_props else list(current.properties)
 
@@ -736,10 +685,7 @@ class DigestScheduler:
                 return (1, float(p.price))
             return (2, float("inf"))
 
-        top_picks = [
-            self._summarize_property(p)
-            for p in sorted(top_pick_candidates, key=top_pick_key)[:5]
-        ]
+        top_picks = [self._summarize_property(p) for p in sorted(top_pick_candidates, key=top_pick_key)[:5]]
 
         expert: Optional[Dict[str, Any]] = None
         if digest_type == "weekly":
@@ -747,21 +693,9 @@ class DigestScheduler:
                 insights = MarketInsights(current)
                 city_idx = insights.get_city_price_indices(None)
                 yoy_latest = insights.get_cities_yoy(None)
-                yoy_latest = (
-                    yoy_latest.dropna(subset=["yoy_pct"])
-                    if "yoy_pct" in yoy_latest.columns
-                    else yoy_latest
-                )
-                top_up = (
-                    yoy_latest.sort_values("yoy_pct", ascending=False)
-                    .head(5)
-                    .to_dict(orient="records")
-                )
-                top_down = (
-                    yoy_latest.sort_values("yoy_pct", ascending=True)
-                    .head(5)
-                    .to_dict(orient="records")
-                )
+                yoy_latest = yoy_latest.dropna(subset=["yoy_pct"]) if "yoy_pct" in yoy_latest.columns else yoy_latest
+                top_up = yoy_latest.sort_values("yoy_pct", ascending=False).head(5).to_dict(orient="records")
+                top_down = yoy_latest.sort_values("yoy_pct", ascending=True).head(5).to_dict(orient="records")
                 expert = {
                     "city_indices": city_idx.head(10).to_dict(orient="records"),
                     "yoy_top_up": top_up,

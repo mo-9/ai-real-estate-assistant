@@ -10,8 +10,9 @@ Provides responsive, mobile-friendly email templates for:
 - Market updates
 """
 
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from data.schemas import Property
 
 
@@ -178,9 +179,7 @@ class PriceDropTemplate(EmailTemplate):
     """Template for price drop alerts."""
 
     @staticmethod
-    def render(
-        property_info: Dict[str, Any], user_name: Optional[str] = None
-    ) -> tuple[str, str]:
+    def render(property_info: Dict[str, Any], user_name: Optional[str] = None) -> tuple[str, str]:
         """
         Render price drop alert email.
 
@@ -281,9 +280,7 @@ class NewPropertyTemplate(EmailTemplate):
         # Build property cards HTML
         properties_html = ""
         for prop in properties[:max_display]:
-            properties_html += EmailTemplate._property_card(
-                prop, EmailTemplate.COLORS["primary"]
-            )
+            properties_html += EmailTemplate._property_card(prop, EmailTemplate.COLORS["primary"])
 
         if len(properties) > max_display:
             remaining = len(properties) - max_display
@@ -389,11 +386,7 @@ class DigestTemplate(EmailTemplate):
                 baths = _fmt_number(p.get("bathrooms"))
                 area = _fmt_number(p.get("area_sqm"))
                 price_per_sqm = p.get("price_per_sqm")
-                pps = (
-                    f"{_fmt_money(price_per_sqm, p.get('currency'))}/m²"
-                    if price_per_sqm is not None
-                    else None
-                )
+                pps = f"{_fmt_money(price_per_sqm, p.get('currency'))}/m²" if price_per_sqm is not None else None
                 prop_type = p.get("property_type")
                 listing_type = p.get("listing_type")
 
@@ -426,22 +419,11 @@ class DigestTemplate(EmailTemplate):
                 subline = " | ".join([b for b in subline_bits if b])
 
                 url = p.get("source_url")
-                link_style = (
-                    f"color: {EmailTemplate.COLORS['primary']}; text-decoration: none;"
-                )
-                cta = (
-                    f'<a href="{url}" style="{link_style}">View listing</a>'
-                    if url
-                    else ""
-                )
+                link_style = f"color: {EmailTemplate.COLORS['primary']}; text-decoration: none;"
+                cta = f'<a href="{url}" style="{link_style}">View listing</a>' if url else ""
 
-                amenity_style = (
-                    f"margin: 6px 0 0 0; color: {EmailTemplate.COLORS['text_light']}; "
-                    "font-size: 13px;"
-                )
-                amenities_html = (
-                    f'<p style="{amenity_style}">{amenities}</p>' if amenities else ""
-                )
+                amenity_style = f"margin: 6px 0 0 0; color: {EmailTemplate.COLORS['text_light']}; " "font-size: 13px;"
+                amenities_html = f'<p style="{amenity_style}">{amenities}</p>' if amenities else ""
 
                 cards += f"""
     <div style="background-color: {EmailTemplate.COLORS['white']}; padding: 15px; border-radius: 8px; margin: 12px 0;
@@ -463,10 +445,7 @@ class DigestTemplate(EmailTemplate):
             if not rows:
                 return ""
             cols = list(rows[0].keys())
-            th_style = (
-                "text-align: left; padding: 8px; border-bottom: 1px solid "
-                f"{EmailTemplate.COLORS['border']};"
-            )
+            th_style = "text-align: left; padding: 8px; border-bottom: 1px solid " f"{EmailTemplate.COLORS['border']};"
             header = "".join([f'<th style="{th_style}">{c}</th>' for c in cols])
             body_rows = ""
             td_style = f"padding: 8px; border-bottom: 1px solid {EmailTemplate.COLORS['border']};"
@@ -478,11 +457,7 @@ class DigestTemplate(EmailTemplate):
                         tds.append(f"{v:.2f}")
                     else:
                         tds.append(str(v) if v is not None else "—")
-                body_rows += (
-                    "<tr>"
-                    + "".join([f'<td style="{td_style}">{cell}</td>' for cell in tds])
-                    + "</tr>"
-                )
+                body_rows += "<tr>" + "".join([f'<td style="{td_style}">{cell}</td>' for cell in tds]) + "</tr>"
             return f"""
 <div style="margin: 25px 0;">
     <h3>📌 {title}</h3>
@@ -559,11 +534,7 @@ class DigestTemplate(EmailTemplate):
             for search in saved_searches:
                 search_name = search.get("name", "Unnamed Search")
                 new_matches = search.get("new_matches", 0)
-                match_color = (
-                    EmailTemplate.COLORS["success"]
-                    if new_matches > 0
-                    else EmailTemplate.COLORS["text_light"]
-                )
+                match_color = EmailTemplate.COLORS["success"] if new_matches > 0 else EmailTemplate.COLORS["text_light"]
 
                 content += f"""
     <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 10px 0;
@@ -615,9 +586,7 @@ class DigestTemplate(EmailTemplate):
             content += "</div>\n"
 
         if digest_type == "weekly" and expert:
-            city_indices = (
-                expert.get("city_indices") if isinstance(expert, dict) else []
-            )
+            city_indices = expert.get("city_indices") if isinstance(expert, dict) else []
             yoy_up = expert.get("yoy_top_up") if isinstance(expert, dict) else []
             yoy_down = expert.get("yoy_top_down") if isinstance(expert, dict) else []
             content += """
@@ -628,9 +597,7 @@ class DigestTemplate(EmailTemplate):
                 border=EmailTemplate.COLORS["border"],
                 primary=EmailTemplate.COLORS["primary"],
             )
-            content += _render_expert_table(
-                "City Price Indices (Top 10)", city_indices or []
-            )
+            content += _render_expert_table("City Price Indices (Top 10)", city_indices or [])
             content += _render_expert_table("YoY — Top Gainers", yoy_up or [])
             content += _render_expert_table("YoY — Top Decliners", yoy_down or [])
 
@@ -697,9 +664,7 @@ class MarketUpdateTemplate(EmailTemplate):
     """Template for market update notifications."""
 
     @staticmethod
-    def render(
-        update_data: Dict[str, Any], user_name: Optional[str] = None
-    ) -> tuple[str, str]:
+    def render(update_data: Dict[str, Any], user_name: Optional[str] = None) -> tuple[str, str]:
         """
         Render market update email.
 

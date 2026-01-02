@@ -18,6 +18,11 @@
 - Data: Pandas 2.2+, Pydantic 2.5+
 - Python 3.11+
 
+## Data Layer (New in V3.1)
+- **BaseDataProvider**: Abstract base class for all data providers.
+- **CSVDataProvider**: Wrapper around legacy CSV loader, implementing the standard interface.
+- **Data Validation**: Pydantic models (Property, etc.) ensure data consistency.
+
 ## Key Data Flows
 - Data load → embeddings → ChromaDB persist → hybrid retrieval → rerank → response
 - Expert Panel → map filters (geo radius, price/rooms/amenities, neutral states) + retrieval filters (listing type, price, sort) + indices/time‑series → export digest

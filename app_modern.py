@@ -64,6 +64,7 @@ from notifications import (
 from notifications.notification_preferences import DigestScheduler
 from streaming import StreamHandler
 from ui.comparison_viz import display_comparison_ui
+from ui.dev_dashboard import render_dev_dashboard
 from ui.geo_viz import _get_city_coordinates
 from utils import (
     ExportFormat,
@@ -2444,16 +2445,19 @@ def render_main_content():
     st.caption(get_text("app_subtitle", lang))
 
     # Create tabs
-    tabs = st.tabs(
-        [
-            get_text("tab_chat", lang),
-            get_text("tab_insights", lang),
-            get_text("tab_compare", lang),
-            get_text("tab_export", lang),
-            get_text("tab_analytics", lang),
-            get_text("tab_notifications", lang),
-        ]
-    )
+    tab_titles = [
+        get_text("tab_chat", lang),
+        get_text("tab_insights", lang),
+        get_text("tab_compare", lang),
+        get_text("tab_export", lang),
+        get_text("tab_analytics", lang),
+        get_text("tab_notifications", lang),
+    ]
+
+    if st.session_state.get("developer_mode", False):
+        tab_titles.append("🛠️ Dev Dashboard")
+
+    tabs = st.tabs(tab_titles)
 
     with tabs[0]:
         render_chat_tab()
@@ -2472,6 +2476,10 @@ def render_main_content():
 
     with tabs[5]:
         render_notifications_tab()
+    
+    if st.session_state.get("developer_mode", False) and len(tabs) > 6:
+        with tabs[6]:
+            render_dev_dashboard()
 
 
 def apply_theme():

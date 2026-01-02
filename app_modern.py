@@ -44,6 +44,7 @@ from analytics import EventType, MarketInsights, SessionTracker
 from config import settings, update_api_key
 from data.csv_loader import DataLoaderCsv
 from data.schemas import PropertyCollection
+from data.providers.factory import DataProviderFactory
 
 # Internationalization
 from i18n import get_available_languages, get_text
@@ -672,18 +673,20 @@ def load_data_from_urls(urls_text: str):
             try:
                 st.info(f"{get_text('url_processing', lang)} {i}/{len(urls)}: {url[:80]}...")
 
-                # Load CSV/data
-                loader = DataLoaderCsv(url)
+                # Load Data (CSV/JSON)
+                provider = DataProviderFactory.create_provider(url)
 
-                # Show converted URL if it's a GitHub URL
-                raw_url = DataLoaderCsv.convert_github_url_to_raw(url)
-                if raw_url != url:
+                # Check for GitHub URL conversion (informational, logic handled in provider)
+                if 'github.com' in url and '/blob/' in url:
                     st.info("🔗 Converting GitHub URL to raw format")
 
-                df = loader.load_df()
+                df = provider.load_data()
                 st.info(f"📊 Loaded {len(df)} rows")
 
-                df_formatted = loader.load_format_df(df)
+                # Format/Normalize DataFrame columns (snake_case, defaults)
+                # Note: CSVDataProvider does this internally, but JSON might not.
+                # Running it again is safe and ensures consistency.
+                df_formatted = DataLoaderCsv.format_df(df)
                 st.info(f"✨ Formatted {len(df_formatted)} properties")
 
                 # Convert to PropertyCollection

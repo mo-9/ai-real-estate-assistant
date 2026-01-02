@@ -73,6 +73,22 @@ class TestJSONDataProvider:
         assert len(df) == 2
         assert df.iloc[1]["city"] == "Krakow"
 
+    @patch("requests.get")
+    def test_load_data_github_url(self, mock_get, valid_json_data):
+        """Test that GitHub blob URLs are converted to raw."""
+        mock_get.return_value.json.return_value = valid_json_data
+        mock_get.return_value.raise_for_status = MagicMock()
+        
+        url = "https://github.com/user/repo/blob/main/data.json"
+        expected_url = "https://raw.githubusercontent.com/user/repo/main/data.json"
+        
+        provider = JSONDataProvider(url)
+        df = provider.load_data()
+        
+        # Check if requests.get was called with converted URL
+        mock_get.assert_called_with(expected_url, timeout=10)
+        assert len(df) == 2
+
     def test_load_data_nested_properties(self, tmp_path, valid_json_data):
         # Test wrapping in "properties" key
         nested = {"properties": valid_json_data}

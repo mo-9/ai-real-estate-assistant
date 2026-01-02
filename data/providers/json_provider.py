@@ -12,11 +12,18 @@ logger = logging.getLogger(__name__)
 class JSONDataProvider(BaseDataProvider):
     """Data provider for JSON files or APIs returning JSON lists."""
 
+    def _convert_github_url(self, url: str) -> str:
+        """Convert GitHub URL to raw content URL."""
+        if 'github.com' in url and '/blob/' in url:
+            return url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/')
+        return url
+
     def validate_source(self) -> bool:
         """Check if the source file or URL exists."""
         if isinstance(self.source, (str, Path)):
             src_str = str(self.source)
             if src_str.startswith(("http://", "https://")):
+                src_str = self._convert_github_url(src_str)
                 try:
                     response = requests.head(src_str, allow_redirects=True, timeout=5)
                     return response.status_code < 400
@@ -88,6 +95,7 @@ class JSONDataProvider(BaseDataProvider):
         if isinstance(self.source, (str, Path)):
             src_str = str(self.source)
             if src_str.startswith(("http://", "https://")):
+                src_str = self._convert_github_url(src_str)
                 response = requests.get(src_str, timeout=10)
                 response.raise_for_status()
                 return response.json()

@@ -619,6 +619,15 @@ def render_sidebar():
 
                 # Vector store stats
                 if st.session_state.vector_store:
+                    index_future = st.session_state.get("vector_store_index_future")
+                    if index_future is not None and not index_future.done():
+                        st.caption("Indexing properties in background…")
+                    elif index_future is not None and index_future.done():
+                        try:
+                            index_future.result()
+                        except Exception as e:
+                            st.warning(f"Vector store indexing failed: {e}")
+                        st.session_state.vector_store_index_future = None
                     stats = st.session_state.vector_store.get_stats()
                     st.info(
                         f"📦 {get_text('vector_store', lang)}: {stats.get('total_documents', 0)} {get_text('documents', lang)}"
@@ -832,11 +841,18 @@ def load_into_vector_store(collection: PropertyCollection):
         if getattr(st.session_state.vector_store, "vector_store", None) is None:
             st.session_state.vector_store = get_vector_store()
 
+        index_future = st.session_state.get("vector_store_index_future")
+        if index_future is not None and not index_future.done():
+            return
+
         # Add properties
         vector_store = st.session_state.vector_store
-        added = vector_store.add_property_collection(collection, replace_existing=False)
+        st.session_state.vector_store_index_future = vector_store.add_property_collection_async(
+            collection,
+            replace_existing=False,
+        )
 
-        logger.info("Added %s properties to vector store", added)
+        logger.info("Started background indexing for vector store")
 
     except Exception as e:
         st.error(f"Error loading into vector store: {e}")

@@ -70,12 +70,13 @@ def test_property_retriever_uses_fallback_while_indexing(tmp_path):
     fake_vector_store._collection.count.return_value = 0
     fake_vector_store._collection.get.return_value = {"ids": []}
 
-    def add_documents_side_effect(batch, ids=None):
+    def add_documents_side_effect(*args, **kwargs):
         started.set()
         allow_finish.wait(timeout=5)
         return None
 
     fake_vector_store.add_documents = MagicMock(side_effect=add_documents_side_effect)
+    fake_vector_store._collection.add = MagicMock(side_effect=add_documents_side_effect)
     fake_vector_store.as_retriever = MagicMock()
     fake_vector_store.similarity_search_with_score = MagicMock(
         return_value=[(Document(page_content="vs", metadata={"id": "vs"}), 0.1)]

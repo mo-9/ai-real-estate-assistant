@@ -360,6 +360,11 @@ class ChromaPropertyStore:
                 logger.warning(f"Error checking duplicates: {e}")
                 # If check fails, proceed with all (upsert)
             
+            # Update local cache for fallback search immediately (optimistic)
+            # This allows searching while embeddings are being generated/indexed
+            with self._cache_lock:
+                self._documents.extend(batch)
+
             try:
                 # 2. Generate Embeddings (CPU/Network) - WITHOUT LOCK
                 texts = [d.page_content for d in batch]
@@ -385,8 +390,9 @@ class ChromaPropertyStore:
                 
                 # Update local cache for fallback search (if we want to keep it sync)
                 # Note: We don't load initial docs, so this cache is partial.
-                with self._cache_lock:
-                    self._documents.extend(batch)
+                # Moved to before embedding to allow search during indexing
+                # with self._cache_lock:
+                #    self._documents.extend(batch)
                     
                 total_added += len(batch)
                 logger.info(f"Added batch {i // batch_size + 1}: {len(batch)} properties")
@@ -627,8 +633,10 @@ class ChromaPropertyStore:
             LangChain retriever instance
         """
         stats = self.get_stats()
-        total = stats.get("total_documents", 0)
-        if self.vector_store is not None and total > 0:
+        # Use DB retriever only if we actually have documents in the DB
+        db_count = stats.get("db_document_count", 0)
+        
+        if self.vector_store is not None and db_count > 0:
             return self.vector_store.as_retriever(
                 search_type=search_type,
                 search_kwargs={
@@ -688,15 +696,20 @@ class ChromaPropertyStore:
             Dictionary with store statistics
         """
         try:
+            db_count = 0
+            cache_count = 0
+            
+            with self._cache_lock:
+                cache_count = len(self._documents)
+
             if self.vector_store is not None:
                 with self._vector_lock:
-                    count = self.vector_store._collection.count()
-                if count == 0:
-                    with self._cache_lock:
-                        count = len(self._documents)
-            else:
-                with self._cache_lock:
-                    count = len(self._documents)
+                    try:
+                        db_count = self.vector_store._collection.count()
+                    except Exception:
+                        pass
+            
+            count = db_count if db_count > 0 else cache_count
 
             emb_cls = type(self.embeddings).__name__ if self.embeddings is not None else "None"
             if "OpenAIEmbeddings" in emb_cls:
@@ -711,6 +724,8 @@ class ChromaPropertyStore:
 
             return {
                 "total_documents": count,
+                "db_document_count": db_count,
+                "cache_document_count": cache_count,
                 "collection_name": self.collection_name,
                 "persist_directory": str(self.persist_directory),
                 "embedding_model": emb_model,

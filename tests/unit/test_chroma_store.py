@@ -1,7 +1,9 @@
-from unittest.mock import patch
+import threading
+from unittest.mock import MagicMock, patch
 
 from vector_store.chroma_store import ChromaPropertyStore
 from data.schemas import Property, PropertyCollection, PropertyType
+from langchain_core.documents import Document
 
 
 def make_property(pid: str, city: str, price: float, rooms: float, desc: str = "") -> Property:
@@ -74,4 +76,55 @@ def test_clear_resets_cache(monkeypatch, tmp_path):
     assert store.get_stats()["total_documents"] == 2
     store.clear()
     assert store.get_stats()["total_documents"] == 0
+
+
+def test_search_falls_back_while_background_indexing(tmp_path, monkeypatch):
+    started = threading.Event()
+    allow_finish = threading.Event()
+
+    fake_vector_store = MagicMock()
+    fake_vector_store._collection = MagicMock()
+    fake_vector_store._collection.count.return_value = 0
+    fake_vector_store._collection.get.return_value = {"ids": []}
+
+    def add_documents_side_effect(batch, ids=None):
+        started.set()
+        allow_finish.wait(timeout=5)
+        return None
+
+    fake_vector_store.add_documents = MagicMock(side_effect=add_documents_side_effect)
+    fake_vector_store.similarity_search_with_score = MagicMock(
+        return_value=[(Document(page_content="vs", metadata={"id": "vs"}), 0.1)]
+    )
+
+    with (
+        patch.object(ChromaPropertyStore, "_create_embeddings", return_value=MagicMock()),
+        patch.object(ChromaPropertyStore, "_initialize_vector_store", return_value=fake_vector_store),
+    ):
+        store = ChromaPropertyStore(persist_directory=str(tmp_path))
+
+    coll = PropertyCollection(
+        properties=[
+            make_property("p1", "Krakow", 900, 2, "balcony garden"),
+            make_property("p2", "Warsaw", 1200, 3, "garage"),
+        ],
+        total_count=2,
+    )
+
+    fut = store.add_property_collection_async(coll, replace_existing=False)
+    assert started.wait(timeout=5)
+
+    results = store.search("garden balcony", k=1)
+    assert results and results[0][0].metadata["id"] == "p1"
+    assert fake_vector_store.similarity_search_with_score.call_count == 0
+
+    stats = store.get_stats()
+    assert stats["total_documents"] == 2
+
+    allow_finish.set()
+    assert fut.result(timeout=10) == 2
+
+    results2 = store.search("anything", k=1)
+    assert results2 and results2[0][0].metadata["id"] == "vs"
+    assert fake_vector_store.similarity_search_with_score.call_count == 1
 

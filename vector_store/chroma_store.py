@@ -5,11 +5,13 @@ This module provides a persistent vector store for property embeddings
 using ChromaDB with FastEmbed embeddings.
 """
 
+from concurrent.futures import Future, ThreadPoolExecutor
 import platform
 from datetime import datetime
 import logging
 import os
 from pathlib import Path
+import threading
 from typing import Any, Dict, List, Optional, Set, cast
 
 import pandas as pd
@@ -39,6 +41,16 @@ except Exception:
 
 # Configure logger
 logger = logging.getLogger(__name__)
+
+_INDEXING_EXECUTOR: Optional[ThreadPoolExecutor] = None
+
+
+def _get_indexing_executor() -> ThreadPoolExecutor:
+    global _INDEXING_EXECUTOR
+    if _INDEXING_EXECUTOR is None:
+        max_workers = int(os.getenv("CHROMA_INDEXING_WORKERS", "1") or "1")
+        _INDEXING_EXECUTOR = ThreadPoolExecutor(max_workers=max_workers)
+    return _INDEXING_EXECUTOR
 
 
 class ChromaPropertyStore:
@@ -91,6 +103,10 @@ class ChromaPropertyStore:
 
         self._documents: List[Document] = []
         self._doc_ids: Set[str] = set()
+        self._cache_lock = threading.Lock()
+        self._vector_lock = threading.Lock()
+        self._indexing_event = threading.Event()
+        self._index_future: Optional[Future[int]] = None
 
     @st.cache_resource
     def _create_embeddings(_self, model_name: str) -> Optional[Embeddings]:
@@ -307,12 +323,13 @@ class ChromaPropertyStore:
             try:
                 doc = self.property_to_document(prop)
                 doc_id = str(doc.metadata.get("id", ""))
-                if doc_id:
-                    if doc_id in self._doc_ids:
-                        continue
-                    self._doc_ids.add(doc_id)
+                with self._cache_lock:
+                    if doc_id:
+                        if doc_id in self._doc_ids:
+                            continue
+                        self._doc_ids.add(doc_id)
+                    self._documents.append(doc)
                 documents.append(doc)
-                self._documents.append(doc)
             except Exception as e:
                 logger.warning(f"Skipping property {prop.id}: {e}")
                 continue
@@ -333,7 +350,8 @@ class ChromaPropertyStore:
 
             try:
                 ids = [str(d.metadata.get("id", f"doc-{i+j}")) for j, d in enumerate(batch)]
-                self.vector_store.add_documents(batch, ids=ids)
+                with self._vector_lock:
+                    self.vector_store.add_documents(batch, ids=ids)
                 total_added += len(batch)
                 logger.info(f"Added batch {i // batch_size + 1}: {len(batch)} properties")
 
@@ -351,7 +369,8 @@ class ChromaPropertyStore:
     def add_property_collection(
         self,
         collection: PropertyCollection,
-        replace_existing: bool = False
+        replace_existing: bool = False,
+        batch_size: int = 100,
     ) -> int:
         """
         Add a PropertyCollection to the vector store.
@@ -366,7 +385,37 @@ class ChromaPropertyStore:
         if replace_existing:
             self.clear()
 
-        return self.add_properties(collection.properties)
+        return self.add_properties(collection.properties, batch_size=batch_size)
+
+    def add_property_collection_async(
+        self,
+        collection: PropertyCollection,
+        replace_existing: bool = False,
+        batch_size: int = 100,
+    ) -> Future[int]:
+        """
+        Add a PropertyCollection in a background thread.
+
+        Returns:
+            Future that resolves to the number of properties added.
+        """
+        if self._index_future is not None and not self._index_future.done():
+            return self._index_future
+
+        def _work() -> int:
+            self._indexing_event.set()
+            try:
+                return self.add_property_collection(
+                    collection,
+                    replace_existing=replace_existing,
+                    batch_size=batch_size,
+                )
+            finally:
+                self._indexing_event.clear()
+
+        executor = _get_indexing_executor()
+        self._index_future = executor.submit(_work)
+        return self._index_future
 
     def search(
         self,
@@ -388,21 +437,24 @@ class ChromaPropertyStore:
             List of (Document, score) tuples
         """
         try:
-            if self.vector_store is not None:
-                results = self.vector_store.similarity_search_with_score(
-                    query=query,
-                    k=k,
-                    filter=filter,
-                    **kwargs
-                )
-                return results
+            if self.vector_store is not None and not self._indexing_event.is_set():
+                with self._vector_lock:
+                    results = self.vector_store.similarity_search_with_score(
+                        query=query,
+                        k=k,
+                        filter=filter,
+                        **kwargs
+                    )
+                    return results
             else:
                 raise RuntimeError("no_vector_store")
         except Exception as e:
             try:
                 q = [t for t in query.lower().split() if t]
                 scored: List[tuple[Document, float]] = []
-                for d in self._documents:
+                with self._cache_lock:
+                    docs = list(self._documents)
+                for d in docs:
                     txt = d.page_content.lower()
                     s = float(sum(1 for t in q if t in txt))
                     if s > 0:
@@ -436,8 +488,40 @@ class ChromaPropertyStore:
         Returns:
             List of matching documents
         """
-        if self.vector_store is None:
-            return []
+        if self.vector_store is None or self._indexing_event.is_set():
+            with self._cache_lock:
+                docs = list(self._documents)
+            filtered: List[Document] = []
+            for doc in docs:
+                md = doc.metadata
+                if city and md.get("city") != city:
+                    continue
+                if has_parking is not None and md.get("has_parking") != has_parking:
+                    continue
+                raw_price = md.get("price")
+                try:
+                    price_val = float(raw_price) if raw_price is not None else None
+                except (TypeError, ValueError):
+                    price_val = None
+                if price_val is None:
+                    continue
+                if min_price is not None and price_val < min_price:
+                    continue
+                if max_price is not None and price_val > max_price:
+                    continue
+                raw_rooms = md.get("rooms")
+                try:
+                    rooms_val = float(raw_rooms) if raw_rooms is not None else None
+                except (TypeError, ValueError):
+                    rooms_val = None
+                if rooms_val is None:
+                    continue
+                if min_rooms is not None and rooms_val < min_rooms:
+                    continue
+                filtered.append(doc)
+                if len(filtered) >= k:
+                    break
+            return filtered
 
         filter_dict: Dict[str, Any] = {}
 
@@ -449,11 +533,12 @@ class ChromaPropertyStore:
 
         # Note: ChromaDB has limited support for range queries
         # For complex filtering, retrieve more results and filter in Python
-        results = self.vector_store.similarity_search(
-            query="",  # Empty query for metadata-only search
-            k=k * 5,  # Retrieve more for filtering
-            filter=filter_dict if filter_dict else None
-        )
+        with self._vector_lock:
+            results = self.vector_store.similarity_search(
+                query="",  # Empty query for metadata-only search
+                k=k * 5,  # Retrieve more for filtering
+                filter=filter_dict if filter_dict else None
+            )
 
         # Apply additional filters
         filtered = []
@@ -498,7 +583,7 @@ class ChromaPropertyStore:
         """
         stats = self.get_stats()
         total = stats.get("total_documents", 0)
-        if self.vector_store is not None and total > 0:
+        if self.vector_store is not None and total > 0 and not self._indexing_event.is_set():
             return self.vector_store.as_retriever(
                 search_type=search_type,
                 search_kwargs={
@@ -529,21 +614,26 @@ class ChromaPropertyStore:
                             scored.append((d, s))
                     scored.sort(key=lambda x: x[1], reverse=True)
                     return [d for d, _s in scored[:self.kk]]
-            return FallbackRetriever(docs=self._documents, kk=k)
+            with self._cache_lock:
+                docs = list(self._documents)
+            return FallbackRetriever(docs=docs, kk=k)
 
     def clear(self) -> None:
         """Clear all documents from the vector store."""
         try:
             if self.vector_store is not None:
-                self.vector_store.delete_collection()
-                self.vector_store = self._initialize_vector_store()
-            self._documents = []
-            self._doc_ids = set()
+                with self._vector_lock:
+                    self.vector_store.delete_collection()
+                    self.vector_store = self._initialize_vector_store()
+            with self._cache_lock:
+                self._documents = []
+                self._doc_ids = set()
             logger.info("Vector store cleared")
 
         except Exception as e:
             logger.error(f"Error clearing vector store: {e}")
-            self._documents = []
+            with self._cache_lock:
+                self._documents = []
 
     def get_stats(self) -> Dict[str, Any]:
         """
@@ -553,12 +643,15 @@ class ChromaPropertyStore:
             Dictionary with store statistics
         """
         try:
-            if self.vector_store is not None:
-                count = self.vector_store._collection.count()
+            if self.vector_store is not None and not self._indexing_event.is_set():
+                with self._vector_lock:
+                    count = self.vector_store._collection.count()
                 if count == 0:
-                    count = len(self._documents)
+                    with self._cache_lock:
+                        count = len(self._documents)
             else:
-                count = len(self._documents)
+                with self._cache_lock:
+                    count = len(self._documents)
 
             emb_cls = type(self.embeddings).__name__ if self.embeddings is not None else "None"
             if "OpenAIEmbeddings" in emb_cls:
@@ -591,9 +684,10 @@ class ChromaPropertyStore:
         try:
             if self.vector_store is None:
                 return
-            self.vector_store.delete(
-                filter={"source_url": source_url}
-            )
+            with self._vector_lock:
+                self.vector_store.delete(
+                    filter={"source_url": source_url}
+                )
             logger.info(f"Deleted properties from source: {source_url}")
 
         except Exception as e:

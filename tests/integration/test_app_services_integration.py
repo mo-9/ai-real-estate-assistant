@@ -1,4 +1,6 @@
 from unittest.mock import patch
+import threading
+from unittest.mock import MagicMock
 
 from langchain_core.documents import Document
 
@@ -57,6 +59,78 @@ def test_property_retriever_forced_listing_type_filters_results(tmp_path, monkey
     assert captured["filter"] == {"listing_type": "rent"}
     assert captured["k"] == 20
     assert captured["fetch_k"] == 20
+
+
+def test_property_retriever_uses_fallback_while_indexing(tmp_path):
+    started = threading.Event()
+    allow_finish = threading.Event()
+
+    fake_vector_store = MagicMock()
+    fake_vector_store._collection = MagicMock()
+    fake_vector_store._collection.count.return_value = 0
+    fake_vector_store._collection.get.return_value = {"ids": []}
+
+    def add_documents_side_effect(batch, ids=None):
+        started.set()
+        allow_finish.wait(timeout=5)
+        return None
+
+    fake_vector_store.add_documents = MagicMock(side_effect=add_documents_side_effect)
+    fake_vector_store.as_retriever = MagicMock()
+    fake_vector_store.similarity_search_with_score = MagicMock(
+        return_value=[(Document(page_content="vs", metadata={"id": "vs"}), 0.1)]
+    )
+
+    with (
+        patch.object(ChromaPropertyStore, "_create_embeddings", return_value=MagicMock()),
+        patch.object(ChromaPropertyStore, "_initialize_vector_store", return_value=fake_vector_store),
+    ):
+        store = ChromaPropertyStore(persist_directory=str(tmp_path))
+
+    props = [
+        Property(
+            id="p1",
+            city="Krakow",
+            price=900,
+            rooms=2,
+            bathrooms=1,
+            area_sqm=50,
+            property_type=PropertyType.APARTMENT,
+            has_garden=True,
+            has_balcony=True,
+            description="balcony garden",
+        ),
+        Property(
+            id="p2",
+            city="Warsaw",
+            price=1200,
+            rooms=3,
+            bathrooms=1,
+            area_sqm=55,
+            property_type=PropertyType.APARTMENT,
+            description="garage",
+        ),
+    ]
+    coll = PropertyCollection(properties=props, total_count=len(props))
+
+    fut = store.add_property_collection_async(coll)
+    assert started.wait(timeout=5)
+
+    retriever = create_property_retriever(
+        vector_store=store,
+        k_results=5,
+        center_lat=None,
+        center_lon=None,
+        radius_km=None,
+        listing_type_filter=None,
+    )
+    results = retriever.get_relevant_documents("garden balcony")
+    assert results and results[0].metadata.get("id") == "p1"
+    assert fake_vector_store.as_retriever.call_count == 0
+    assert fake_vector_store.similarity_search_with_score.call_count == 0
+
+    allow_finish.set()
+    assert fut.result(timeout=10) == 2
 
 
 def test_property_retriever_geo_radius_filters_results(tmp_path, monkeypatch):

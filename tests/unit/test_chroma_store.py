@@ -78,27 +78,31 @@ def test_clear_resets_cache(monkeypatch, tmp_path):
     assert store.get_stats()["total_documents"] == 0
 
 
-def test_search_falls_back_while_background_indexing(tmp_path, monkeypatch):
-    started = threading.Event()
-    allow_finish = threading.Event()
+def test_search_concurrent_with_embedding(tmp_path, monkeypatch):
+    """
+    Test that search does not block while embeddings are being generated.
+    """
+    started_embedding = threading.Event()
+    allow_finish_embedding = threading.Event()
 
+    # Mock Vector Store
     fake_vector_store = MagicMock()
     fake_vector_store._collection = MagicMock()
     fake_vector_store._collection.count.return_value = 0
     fake_vector_store._collection.get.return_value = {"ids": []}
-
-    def add_documents_side_effect(batch, ids=None):
-        started.set()
-        allow_finish.wait(timeout=5)
-        return None
-
-    fake_vector_store.add_documents = MagicMock(side_effect=add_documents_side_effect)
-    fake_vector_store.similarity_search_with_score = MagicMock(
-        return_value=[(Document(page_content="vs", metadata={"id": "vs"}), 0.1)]
-    )
+    
+    # Mock Embeddings
+    fake_embeddings = MagicMock()
+    def embed_side_effect(texts):
+        started_embedding.set()
+        # Simulate heavy CPU work
+        allow_finish_embedding.wait(timeout=5)
+        return [[0.1] * 384 for _ in texts]
+    
+    fake_embeddings.embed_documents.side_effect = embed_side_effect
 
     with (
-        patch.object(ChromaPropertyStore, "_create_embeddings", return_value=MagicMock()),
+        patch.object(ChromaPropertyStore, "_create_embeddings", return_value=fake_embeddings),
         patch.object(ChromaPropertyStore, "_initialize_vector_store", return_value=fake_vector_store),
     ):
         store = ChromaPropertyStore(persist_directory=str(tmp_path))
@@ -111,20 +115,34 @@ def test_search_falls_back_while_background_indexing(tmp_path, monkeypatch):
         total_count=2,
     )
 
+    # Start async indexing
     fut = store.add_property_collection_async(coll, replace_existing=False)
-    assert started.wait(timeout=5)
+    
+    # Wait for embedding to start
+    assert started_embedding.wait(timeout=5), "Embedding did not start"
 
-    results = store.search("garden balcony", k=1)
-    assert results and results[0][0].metadata["id"] == "p1"
-    assert fake_vector_store.similarity_search_with_score.call_count == 0
-
-    stats = store.get_stats()
-    assert stats["total_documents"] == 2
-
-    allow_finish.set()
-    assert fut.result(timeout=10) == 2
-
-    results2 = store.search("anything", k=1)
-    assert results2 and results2[0][0].metadata["id"] == "vs"
-    assert fake_vector_store.similarity_search_with_score.call_count == 1
+    # Now search should NOT block even though embedding is "stuck"
+    # Because embedding happens OUTSIDE the lock
+    # And search only needs the lock which is free
+    
+    # Mock search result on vector store (simulating previous data or concurrent read)
+    fake_vector_store.similarity_search_with_score.return_value = [
+        (Document(page_content="vs", metadata={"id": "vs"}), 0.1)
+    ]
+    
+    # This call should return immediately
+    results = store.search("anything", k=1)
+    
+    assert len(results) == 1
+    assert results[0][0].metadata["id"] == "vs"
+    
+    # Finish embedding
+    allow_finish_embedding.set()
+    
+    # Wait for job to finish
+    added = fut.result(timeout=5)
+    assert added == 2
+    
+    # Verify add was called
+    assert fake_vector_store._collection.add.called
 

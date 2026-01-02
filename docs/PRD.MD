@@ -130,7 +130,7 @@ Real estate agents often spend significant time manually matching clients with p
 | PE003 | Geographical mapping of properties | Medium | Integrate with mapping services to visualize property locations |
 | PE004 | Sentiment analysis for property descriptions | Low | Add sentiment analysis module using specialized LLM fine-tuning |
 | PE005 | Support for international property markets | Medium | Enhance data processing to handle different market formats and currencies |
-| PE006 | Fix "get db freeze" issue | High | Implement asynchronous data processing to prevent UI freezing |
+| PE006 | Fix "get db freeze" issue | High | Implement asynchronous data processing to prevent UI freezing (Completed: V3.1) |
 
 ## Success Metrics
 

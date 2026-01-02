@@ -102,7 +102,8 @@ class ChromaPropertyStore:
         )
 
         self._documents: List[Document] = []
-        self._doc_ids: Set[str] = set()
+        # We no longer load all IDs into memory to avoid startup freeze
+        # self._doc_ids: Set[str] = set() 
         self._cache_lock = threading.Lock()
         self._vector_lock = threading.Lock()
         self._indexing_event = threading.Event()
@@ -155,14 +156,13 @@ class ChromaPropertyStore:
                 )
 
                 # Check if collection has any documents
-                collection_stats = vector_store._collection.count()
-                logger.info(f"Loaded existing ChromaDB collection with {collection_stats} documents")
                 try:
-                    existing = vector_store._collection.get(include=[], limit=None)
-                    for _id in existing.get("ids", []) or []:
-                        self._doc_ids.add(str(_id))
-                except Exception:
-                    pass
+                    collection_stats = vector_store._collection.count()
+                    logger.info(f"Loaded existing ChromaDB collection with {collection_stats} documents")
+                except Exception as e:
+                    logger.warning(f"Could not get collection stats: {e}")
+                
+                # Removed blocking ID loading loop for performance
                 return vector_store
             else:
                 # Directly use in-memory on platforms where persistence is disabled
@@ -172,12 +172,6 @@ class ChromaPropertyStore:
                 )
                 logger.info("Using in-memory Chroma vector store (persistence disabled for this platform)")
                 st.warning("Persistent vector store unavailable; using in-memory store")
-                try:
-                    existing = vector_store._collection.get(include=[], limit=None)
-                    for _id in existing.get("ids", []) or []:
-                        self._doc_ids.add(str(_id))
-                except Exception:
-                    pass
                 return vector_store
 
         except BaseException as e:
@@ -191,12 +185,6 @@ class ChromaPropertyStore:
                 )
                 logger.info("Initialized in-memory Chroma vector store (no persistence)")
                 st.warning("Persistent vector store unavailable; using in-memory store")
-                try:
-                    existing = vector_store._collection.get(include=[], limit=None)
-                    for _id in existing.get("ids", []) or []:
-                        self._doc_ids.add(str(_id))
-                except Exception:
-                    pass
                 return vector_store
             except BaseException as e2:
                 logger.error(f"In-memory Chroma init failed: {e2}")
@@ -317,18 +305,11 @@ class ChromaPropertyStore:
         Returns:
             Number of properties added
         """
+        # Convert all to documents first
         documents: List[Document] = []
-
         for prop in properties:
             try:
                 doc = self.property_to_document(prop)
-                doc_id = str(doc.metadata.get("id", ""))
-                with self._cache_lock:
-                    if doc_id:
-                        if doc_id in self._doc_ids:
-                            continue
-                        self._doc_ids.add(doc_id)
-                    self._documents.append(doc)
                 documents.append(doc)
             except Exception as e:
                 logger.warning(f"Skipping property {prop.id}: {e}")
@@ -340,6 +321,8 @@ class ChromaPropertyStore:
 
         # If vector store is unavailable, keep documents in fallback cache only
         if self.vector_store is None:
+            with self._cache_lock:
+                self._documents.extend(documents)
             logger.info(f"Vector store disabled; cached {len(documents)} properties in memory")
             return len(documents)
 
@@ -347,11 +330,64 @@ class ChromaPropertyStore:
         total_added = 0
         for i in range(0, len(documents), batch_size):
             batch = documents[i:i + batch_size]
-
+            batch_ids = [str(d.metadata.get("id", f"doc-{i+j}")) for j, d in enumerate(batch)]
+            
+            # 1. Filter duplicates (check against DB)
             try:
-                ids = [str(d.metadata.get("id", f"doc-{i+j}")) for j, d in enumerate(batch)]
+                # Use a lightweight check if possible, or trust Chroma to handle upserts.
+                # Here we fetch existing IDs in this batch to skip embedding them if needed.
+                # Or we can just upsert. If we upsert, we re-embed, which costs money/CPU.
+                # So checking existence is better.
+                if self.vector_store:
+                     # Check which IDs exist
+                    existing = self.vector_store._collection.get(ids=batch_ids, include=[])
+                    existing_ids = set(existing.get("ids", []))
+                    
+                    # Filter batch
+                    new_batch = []
+                    new_ids = []
+                    for doc, doc_id in zip(batch, batch_ids):
+                        if doc_id not in existing_ids:
+                            new_batch.append(doc)
+                            new_ids.append(doc_id)
+                    
+                    if not new_batch:
+                        continue
+                    
+                    batch = new_batch
+                    batch_ids = new_ids
+            except Exception as e:
+                logger.warning(f"Error checking duplicates: {e}")
+                # If check fails, proceed with all (upsert)
+            
+            try:
+                # 2. Generate Embeddings (CPU/Network) - WITHOUT LOCK
+                texts = [d.page_content for d in batch]
+                metadatas = [d.metadata for d in batch]
+                
+                embeddings = None
+                if self.embeddings:
+                    embeddings = self.embeddings.embed_documents(texts)
+                
+                # 3. Write to DB - WITH LOCK
                 with self._vector_lock:
-                    self.vector_store.add_documents(batch, ids=ids)
+                    if embeddings:
+                        # Direct add to collection to avoid re-embedding
+                        self.vector_store._collection.add(
+                            ids=batch_ids,
+                            embeddings=embeddings,
+                            metadatas=metadatas,
+                            documents=texts
+                        )
+                    else:
+                        # Fallback if no embeddings (rare)
+                        self.vector_store.add_documents(batch, ids=batch_ids)
+                
+                # Update local cache for fallback search (if we want to keep it sync)
+                # Note: We don't load initial docs, so this cache is partial.
+                with self._cache_lock:
+                    self._documents.extend(batch)
+                    
                 total_added += len(batch)
                 logger.info(f"Added batch {i // batch_size + 1}: {len(batch)} properties")
 
@@ -363,8 +399,7 @@ class ChromaPropertyStore:
             logger.info(f"Total properties added to vector store: {total_added}")
             return total_added
         else:
-            logger.info(f"Stored {len(documents)} properties in fallback cache")
-            return len(documents)
+            return 0
 
     def add_property_collection(
         self,
@@ -437,7 +472,8 @@ class ChromaPropertyStore:
             List of (Document, score) tuples
         """
         try:
-            if self.vector_store is not None and not self._indexing_event.is_set():
+            # We trust the lock to handle concurrency with indexing
+            if self.vector_store is not None:
                 with self._vector_lock:
                     results = self.vector_store.similarity_search_with_score(
                         query=query,
@@ -449,11 +485,19 @@ class ChromaPropertyStore:
             else:
                 raise RuntimeError("no_vector_store")
         except Exception as e:
+            # Fallback to simple text search on cached documents
             try:
                 q = [t for t in query.lower().split() if t]
                 scored: List[tuple[Document, float]] = []
                 with self._cache_lock:
                     docs = list(self._documents)
+                
+                if not docs:
+                    # If we have a vector store but search failed, maybe it's empty or locked?
+                    # If we have no docs in memory, we can't do anything.
+                    logger.warning(f"Search failed and no cached docs: {e}")
+                    return []
+
                 for d in docs:
                     txt = d.page_content.lower()
                     s = float(sum(1 for t in q if t in txt))
@@ -488,7 +532,8 @@ class ChromaPropertyStore:
         Returns:
             List of matching documents
         """
-        if self.vector_store is None or self._indexing_event.is_set():
+        # If vector store is missing, use fallback cache
+        if self.vector_store is None:
             with self._cache_lock:
                 docs = list(self._documents)
             filtered: List[Document] = []
@@ -583,7 +628,7 @@ class ChromaPropertyStore:
         """
         stats = self.get_stats()
         total = stats.get("total_documents", 0)
-        if self.vector_store is not None and total > 0 and not self._indexing_event.is_set():
+        if self.vector_store is not None and total > 0:
             return self.vector_store.as_retriever(
                 search_type=search_type,
                 search_kwargs={
@@ -643,7 +688,7 @@ class ChromaPropertyStore:
             Dictionary with store statistics
         """
         try:
-            if self.vector_store is not None and not self._indexing_event.is_set():
+            if self.vector_store is not None:
                 with self._vector_lock:
                     count = self.vector_store._collection.count()
                 if count == 0:

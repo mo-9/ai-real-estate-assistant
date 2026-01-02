@@ -840,24 +840,32 @@ def load_into_vector_store(collection: PropertyCollection):
             st.session_state.vector_store = get_vector_store()
 
         if getattr(st.session_state.vector_store, "vector_store", None) is None:
+            # Try to re-initialize if it was previously failed or None
             st.session_state.vector_store = get_vector_store()
 
         index_future = st.session_state.get("vector_store_index_future")
         if index_future is not None and not index_future.done():
+            st.toast("Background indexing is already in progress...", icon="⏳")
             return
 
         # Add properties
         vector_store = st.session_state.vector_store
-        st.session_state.vector_store_index_future = vector_store.add_property_collection_async(
-            collection,
-            replace_existing=False,
-        )
-
-        logger.info("Started background indexing for vector store")
+        
+        # Check if vector store is capable of indexing
+        if vector_store:
+            st.session_state.vector_store_index_future = vector_store.add_property_collection_async(
+                collection,
+                replace_existing=False,
+            )
+            st.toast("Started background indexing. You can continue searching.", icon="🚀")
+            logger.info("Started background indexing for vector store")
+        else:
+             st.warning("Vector store is not available. Properties will be searched via simple cache only.")
 
     except Exception as e:
-        st.error(f"Error loading into vector store: {e}")
-        raise
+        logger.error(f"Error triggering vector store indexing: {e}")
+        st.error(f"Could not start indexing: {e}")
+        # Don't raise, just let the app continue with whatever data it has
 
 
 def create_conversation_chain():

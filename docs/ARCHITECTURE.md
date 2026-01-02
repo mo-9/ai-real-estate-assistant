@@ -22,6 +22,10 @@
 - **BaseDataProvider**: Abstract base class for all data providers.
 - **CSVDataProvider**: Wrapper around legacy CSV loader, implementing the standard interface.
 - **Data Validation**: Pydantic models (Property, etc.) ensure data consistency.
+- **Vector Store Optimization (PE006)**:
+    - **Non-blocking Initialization**: Lazy loading of IDs to prevent startup freeze.
+    - **Async Indexing**: Background thread processing with separated embedding generation (unlocked) and database writing (locked).
+    - **Concurrent Search**: Search operations remain responsive during heavy indexing jobs.
 
 ## Key Data Flows
 - Data load → embeddings → ChromaDB persist → hybrid retrieval → rerank → response

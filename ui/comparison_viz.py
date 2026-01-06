@@ -31,8 +31,8 @@ class PropertyComparison:
         """
         if len(properties) < 2:
             raise ValueError("Need at least 2 properties to compare")
-        if len(properties) > 4:
-            raise ValueError("Can compare maximum 4 properties")
+        if len(properties) > 6:
+            raise ValueError("Can compare maximum 6 properties")
 
         self.properties = properties
         self.df = self._to_dataframe()

@@ -126,7 +126,7 @@ Real estate agents often spend significant time manually matching clients with p
 | Feature ID | Description | Priority | Technical Approach |
 |------------|-------------|----------|-------------------|
 | PE001 | Integration with additional data sources | High | Develop adapters for real estate APIs and additional data formats (Implemented: Base Provider + CSV Adapter) |
-| PE002 | Visual property comparisons | Medium | Implement side-by-side comparison components in Streamlit UI |
+| PE002 | Visual property comparisons | Medium | Implement side-by-side comparison components in Streamlit UI (Completed: V3.2 - Radar charts, price trends, amenity matrix) |
 | PE003 | Geographical mapping of properties | Medium | Integrate with mapping services to visualize property locations |
 | PE004 | Sentiment analysis for property descriptions | Low | Add sentiment analysis module using specialized LLM fine-tuning |
 | PE005 | Support for international property markets | Medium | Enhance data processing to handle different market formats and currencies |

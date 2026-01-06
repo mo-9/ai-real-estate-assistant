@@ -1,10 +1,11 @@
 # Architecture (V3)
 
 ## System Overview
-- Streamlit UI (model selection, settings, chat, Expert Panel)
+- Streamlit UI (model selection, settings, chat, Expert Panel, Comparison Dashboard)
 - Query Analyzer (intent, filters)
 - Hybrid processing: simple → RAG, complex → Agent + Tools
 - Tools: mortgage, comparison, analysis
+- Comparison Dashboard: Interactive side-by-side analysis, radar charts, price trends, amenity matrix
 - Retriever: ChromaDB (semantic + keyword, MMR), AdvancedPropertyRetriever (geo radius, price filters, sorting)
 - Reranker (multi-signal)
 - Response formatter

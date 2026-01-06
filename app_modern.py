@@ -2017,7 +2017,7 @@ def render_comparisons_tab():
 
     # Display comparison
     try:
-        display_comparison_ui(selected_properties)
+        display_comparison_dashboard(selected_properties, show_export=True)
 
     except Exception as e:
         st.error(f"Error creating comparison: {e}")

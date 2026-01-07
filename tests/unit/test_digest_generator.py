@@ -44,8 +44,8 @@ class TestDigestGenerator(unittest.TestCase):
         # Mock market insights
         mock_trend = MagicMock()
         mock_trend.direction = "increasing"
-        mock_trend.percentage_change = 5.2
-        mock_trend.current_average_price = 550000
+        mock_trend.change_percent = 5.2
+        mock_trend.average_price = 550000
         self.mock_market_insights.get_price_trend.return_value = mock_trend
 
         # Execute

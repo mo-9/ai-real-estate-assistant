@@ -144,13 +144,13 @@ class DigestGenerator:
                     trending_cities.append({
                         "name": city,
                         "trend": trend.direction,
-                        "change": f"{trend.percentage_change:.1f}%"
+                        "change": f"{trend.change_percent:.1f}%"
                     })
                     
                     expert_rows.append({
                         "City": city,
-                        "Avg Price": f"${trend.current_average_price:,.0f}",
-                        "Trend": f"{trend.direction} ({trend.percentage_change:+.1f}%)",
+                        "Avg Price": f"${trend.average_price:,.0f}",
+                        "Trend": f"{trend.direction} ({trend.change_percent:+.1f}%)",
                         "Inventory": "Normal" # Placeholder or derived
                     })
             except Exception:

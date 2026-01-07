@@ -108,7 +108,7 @@
   - [DONE] Visual property comparison UI (radar charts, price trends)
   - [DONE] Base digest (consumer/expert) (est: 2–4 days)
 - Sprint 2 (2–3 weeks)
-  - Indices and comparables for CIS/Russia/Turkey/USA/Africa
+  - [DONE] Indices and comparables for CIS/Russia/Turkey/USA/Africa
   - [DONE] Yield/ROI, rate/expense scenarios
   - PRO filters (energy/year/elevator/parking), multilingual texts
 - Sprint 3 (3–4 weeks)

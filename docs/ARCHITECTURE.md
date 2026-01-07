@@ -6,6 +6,7 @@
 - Hybrid processing: simple → RAG, complex → Agent + Tools
 - Tools: mortgage, comparison, analysis
 - **Financial Analytics**: Standardized ROI/Yield/Mortgage calculator via `FinancialCalculator`.
+- **Market Analytics**: Multi-region indices and comparables (CIS, Russia, Turkey, USA, Africa) via `MarketInsights`.
 - Comparison Dashboard: Interactive side-by-side analysis, radar charts, price trends, amenity matrix
 - Retriever: ChromaDB (semantic + keyword, MMR), AdvancedPropertyRetriever (geo radius, price filters, sorting)
 - Reranker (multi-signal)

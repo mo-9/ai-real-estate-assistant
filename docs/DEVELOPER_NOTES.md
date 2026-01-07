@@ -70,3 +70,29 @@ metrics = FinancialCalculator.analyze_investment(
 )
 print(f"CoC Return: {metrics.cash_on_cash_return}%")
 ```
+
+---
+
+## Analytics - Regional Market Insights
+
+### Overview
+The `MarketInsights` engine has been extended to support multi-region analysis, enabling comparisons across countries and specific regions (e.g., CIS, Russia, Turkey, USA).
+
+### Key Features
+*   **Country/Region Statistics**: Get aggregate market stats filtered by country or region.
+*   **Price Trends**: Analyze price direction and changes for specific geographic scopes.
+*   **Regional Indices**: Generate time-series price indices for multiple countries to track YoY performance.
+
+### Usage Example
+```python
+from analytics import MarketInsights
+
+# Get stats for a specific country
+stats = insights.get_country_statistics("Turkey")
+
+# Get price trend for a region
+trend = insights.get_price_trend(region="Marmara")
+
+# Get comparative indices for multiple countries
+df_indices = insights.get_country_indices(countries=["Turkey", "Russia", "USA"])
+```

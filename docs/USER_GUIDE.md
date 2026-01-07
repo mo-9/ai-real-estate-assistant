@@ -29,3 +29,20 @@ To ensure your digest contains relevant properties:
 1. Use the **Search** tab to define your criteria (Location, Price, Rooms, etc.).
 2. Click **Save Search** and give it a memorable name (e.g., "2-bed in Downtown").
 3. These searches will automatically feed into your digest.
+
+## Market Analytics
+
+The platform now supports comprehensive market analysis across multiple regions, including indices and comparables for CIS, Russia, Turkey, USA, and Africa.
+
+### Regional Insights
+You can access detailed statistics for specific countries and regions:
+- **Market Overview**: Total listings, average/median prices, and price per square meter.
+- **Price Trends**: Analyze historical price movements to identify growing or cooling markets.
+- **Comparables**: Compare property metrics across different cities and countries.
+
+### How to Use
+1. **Expert Mode**: Ensure you are in Expert Mode to view detailed indices.
+2. **Filtering**: Use the location filters to select a specific country (e.g., "Turkey") or region (e.g., "Marmara").
+3. **Indices Panel**: View the generated price indices and year-over-year (YoY) growth rates.
+
+These insights are automatically included in the **Expert Digest** for your subscribed regions.

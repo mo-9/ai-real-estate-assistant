@@ -70,7 +70,7 @@
 - Support conversation sessions with persisted history and replay
 - Support streaming responses (SSE/WebSocket) for chat and tool progress
 - Support tool actions (mortgage, comparison, price analysis, location analysis)
-- Support exports (CSV/Excel/JSON/Markdown/PDF) with reproducible inputs
+- [DONE] Support exports (CSV/Excel/JSON/Markdown/PDF) with reproducible inputs
 - Support notifications pipeline (alerts, digests) with user preferences
 - Provide admin endpoints for ingestion/reindexing and health checks
 

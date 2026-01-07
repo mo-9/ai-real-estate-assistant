@@ -29,6 +29,7 @@ class ExportFormat(str, Enum):
     EXCEL = "xlsx"
     JSON = "json"
     MARKDOWN = "md"
+    PDF = "pdf"
 
 
 class PropertyExporter:
@@ -39,21 +40,41 @@ class PropertyExporter:
     and Markdown formats with optional filtering and customization.
     """
 
-    def __init__(self, properties: PropertyCollection):
+    def __init__(self, properties):
         """
         Initialize exporter with property data.
 
         Args:
-            properties: Collection of properties to export
+            properties: Collection of properties to export (PropertyCollection, DataFrame, or list of dicts)
         """
         self.properties = properties
         self.df = self._to_dataframe()
 
     def _to_dataframe(self) -> pd.DataFrame:
         """Convert properties to pandas DataFrame."""
+        if isinstance(self.properties, pd.DataFrame):
+            return self.properties.copy()
+            
+        if isinstance(self.properties, list):
+            return pd.DataFrame(self.properties)
+
+        # Assume PropertyCollection
         data = []
-        for prop in self.properties.properties:
-            prop_dict = prop.dict()
+        # Handle case where properties might be a list inside PropertyCollection or just the object itself if it's iterable
+        props_list = getattr(self.properties, 'properties', self.properties)
+        
+        # If it's not iterable (single object), wrap in list
+        if not isinstance(props_list, (list, tuple)) and not hasattr(props_list, '__iter__'):
+             props_list = [props_list]
+
+        for prop in props_list:
+            if hasattr(prop, 'dict'):
+                prop_dict = prop.dict()
+            elif isinstance(prop, dict):
+                prop_dict = prop
+            else:
+                continue # Skip unknown types
+
             # Convert enum to string
             if 'property_type' in prop_dict:
                 prop_type = prop_dict['property_type']
@@ -71,9 +92,13 @@ class PropertyExporter:
                 prop_dict['closest_poi_distance'] = min(p.distance_meters for p in prop.points_of_interest)
                 prop_dict['poi_categories'] = ", ".join(sorted(list(set(p.category for p in prop.points_of_interest))))
             else:
-                prop_dict['poi_count'] = 0
-                prop_dict['closest_poi_distance'] = None
-                prop_dict['poi_categories'] = ""
+                # Keep existing if already in dict, else set default
+                if 'poi_count' not in prop_dict:
+                    prop_dict['poi_count'] = 0
+                if 'closest_poi_distance' not in prop_dict:
+                    prop_dict['closest_poi_distance'] = None
+                if 'poi_categories' not in prop_dict:
+                    prop_dict['poi_categories'] = ""
 
             data.append(prop_dict)
         return pd.DataFrame(data)
@@ -190,13 +215,23 @@ class PropertyExporter:
         Returns:
             JSON string
         """
+        if isinstance(self.properties, pd.DataFrame):
+            props_data = self.properties.to_dict(orient='records')
+            total_count = len(self.properties)
+        elif isinstance(self.properties, list):
+            props_data = self.properties
+            total_count = len(self.properties)
+        else:
+            props_data = [prop.dict() for prop in self.properties.properties]
+            total_count = self.properties.total_count
+
         data = {
-            'properties': [prop.dict() for prop in self.properties.properties]
+            'properties': props_data
         }
 
         if include_metadata:
             data['metadata'] = {
-                'total_count': self.properties.total_count,
+                'total_count': total_count,
                 'exported_at': datetime.now().isoformat(),
                 'export_format': 'json'
             }
@@ -221,10 +256,32 @@ class PropertyExporter:
         """
         lines = []
 
+        # Helper to get properties list
+        if isinstance(self.properties, pd.DataFrame):
+            # Convert to list of named tuples for attribute access
+            properties_list = list(self.properties.itertuples(index=False))
+            total_count = len(self.properties)
+        elif isinstance(self.properties, list):
+            # Wrap dicts to allow dot access if needed, or ensure code handles dicts
+            # But the code below uses dot access (prop.city).
+            # Let's use a simple wrapper class
+            class DictObj:
+                def __init__(self, d):
+                    for k, v in d.items():
+                        setattr(self, k, v)
+                def __getattr__(self, name):
+                    return None # Default to None for missing attributes
+            
+            properties_list = [DictObj(p) if isinstance(p, dict) else p for p in self.properties]
+            total_count = len(self.properties)
+        else:
+            properties_list = self.properties.properties
+            total_count = self.properties.total_count
+
         # Header
         lines.append("# Property Listing Report")
         lines.append(f"\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        lines.append(f"\nTotal Properties: {len(self.properties.properties)}")
+        lines.append(f"\nTotal Properties: {total_count}")
         lines.append("\n---\n")
 
         # Summary statistics
@@ -236,86 +293,175 @@ class PropertyExporter:
                 f"- **Price Range**: ${self.df['price'].min():.2f} - ${self.df['price'].max():.2f}"
             )
             lines.append(f"- **Average Rooms**: {self.df['rooms'].mean():.1f}")
-            lines.append(
-                f"- **Properties with Parking**: {self.df['has_parking'].sum()} "
-                f"({self.df['has_parking'].mean()*100:.1f}%)"
-            )
-            lines.append(
-                f"- **Properties with Garden**: {self.df['has_garden'].sum()} "
-                f"({self.df['has_garden'].mean()*100:.1f}%)\n"
-            )
+            
+            # Check for columns before accessing
+            if 'has_parking' in self.df.columns:
+                lines.append(
+                    f"- **Properties with Parking**: {self.df['has_parking'].sum()} "
+                    f"({self.df['has_parking'].mean()*100:.1f}%)"
+                )
+            if 'has_garden' in self.df.columns:
+                lines.append(
+                    f"- **Properties with Garden**: {self.df['has_garden'].sum()} "
+                    f"({self.df['has_garden'].mean()*100:.1f}%)\n"
+                )
 
             # By city
             lines.append("### By City\n")
-            city_counts = self.df['city'].value_counts()
-            for city, count in city_counts.items():
-                city_avg = self.df[self.df['city'] == city]['price'].mean()
-                lines.append(f"- **{city}**: {count} properties (avg: ${city_avg:.2f})")
+            if 'city' in self.df.columns:
+                city_counts = self.df['city'].value_counts()
+                for city, count in city_counts.items():
+                    city_avg = self.df[self.df['city'] == city]['price'].mean()
+                    lines.append(f"- **{city}**: {count} properties (avg: ${city_avg:.2f})")
             lines.append("\n---\n")
 
         # Properties
         lines.append("## Property Listings\n")
 
         properties_to_show = (
-            self.properties.properties[:max_properties]
+            properties_list[:max_properties]
             if max_properties
-            else self.properties.properties
+            else properties_list
         )
 
         for i, prop in enumerate(properties_to_show, 1):
-            lines.append(f"### {i}. Property in {prop.city}")
-            if prop.title:
-                lines.append(f"**{prop.title}**\n")
+            city = getattr(prop, 'city', 'Unknown')
+            lines.append(f"### {i}. Property in {city}")
+            
+            title = getattr(prop, 'title', None)
+            if title:
+                lines.append(f"**{title}**\n")
 
-            lines.append(f"- **Price**: ${prop.price}/month")
+            price = getattr(prop, 'price', 0)
+            lines.append(f"- **Price**: ${price}/month")
+            
+            prop_type = getattr(prop, 'property_type', 'Unknown')
+            type_str = prop_type.value if hasattr(prop_type, 'value') else str(prop_type)
+            lines.append(f"- **Type**: {type_str}")
+            
+            rooms = getattr(prop, 'rooms', 0)
+            bathrooms = getattr(prop, 'bathrooms', 0)
             lines.append(
-                f"- **Type**: {prop.property_type.value if hasattr(prop.property_type, 'value') else str(prop.property_type)}"
-            )
-            lines.append(
-                f"- **Rooms**: {int(prop.rooms)} bedrooms, {int(prop.bathrooms)} bathrooms"
+                f"- **Rooms**: {int(rooms)} bedrooms, {int(bathrooms)} bathrooms"
             )
 
-            if prop.area_sqm:
-                lines.append(f"- **Area**: {prop.area_sqm} sqm")
+            area = getattr(prop, 'area_sqm', None)
+            if area:
+                lines.append(f"- **Area**: {area} sqm")
 
             # Amenities
             amenities = []
-            if prop.has_parking:
+            if getattr(prop, 'has_parking', False):
                 amenities.append("Parking")
-            if prop.has_garden:
+            if getattr(prop, 'has_garden', False):
                 amenities.append("Garden")
-            if prop.has_pool:
+            if getattr(prop, 'has_pool', False):
                 amenities.append("Pool")
-            if prop.is_furnished:
+            if getattr(prop, 'is_furnished', False):
                 amenities.append("Furnished")
-            if prop.has_balcony:
+            if getattr(prop, 'has_balcony', False):
                 amenities.append("Balcony")
-            if prop.has_elevator:
+            if getattr(prop, 'has_elevator', False):
                 amenities.append("Elevator")
 
             if amenities:
                 lines.append(f"- **Amenities**: {', '.join(amenities)}")
 
             # Points of Interest
-            if hasattr(prop, 'points_of_interest') and prop.points_of_interest:
+            pois = getattr(prop, 'points_of_interest', [])
+            if pois:
                 lines.append("- **Points of Interest**:")
-                for poi in prop.points_of_interest:
-                    lines.append(f"  - {poi.name} ({poi.category}): {int(poi.distance_meters)}m")
+                for poi in pois:
+                    # Handle POI if it's object or dict
+                    name = getattr(poi, 'name', poi.get('name') if isinstance(poi, dict) else str(poi))
+                    category = getattr(poi, 'category', poi.get('category') if isinstance(poi, dict) else '')
+                    distance = getattr(poi, 'distance_meters', poi.get('distance_meters') if isinstance(poi, dict) else 0)
+                    lines.append(f"  - {name} ({category}): {int(distance)}m")
 
-            if prop.description:
-                lines.append(f"\n{prop.description}")
+            desc = getattr(prop, 'description', None)
+            if desc:
+                lines.append(f"\n{desc}")
 
-            if prop.source_url:
-                lines.append(f"\n[View Listing]({prop.source_url})")
+            url = getattr(prop, 'source_url', None)
+            if url:
+                lines.append(f"\n[View Listing]({url})")
 
             lines.append("\n---\n")
 
-        if max_properties and len(self.properties.properties) > max_properties:
+        if max_properties and len(properties_list) > max_properties:
             lines.append(
-                f"\n*Showing {max_properties} of {len(self.properties.properties)} properties*\n"
+                f"\n*Showing {max_properties} of {len(properties_list)} properties*\n"
             )
 
         return '\n'.join(lines)
+
+    def export_to_pdf(self) -> BytesIO:
+        """
+        Export properties to PDF format.
+
+        Returns:
+            BytesIO object containing PDF file
+        """
+        output = BytesIO()
+        doc = SimpleDocTemplate(output, pagesize=A4)
+        styles = getSampleStyleSheet()
+        story = []
+
+        # Title
+        story.append(Paragraph("Property Listing Report", styles['Title']))
+        story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
+        story.append(Spacer(1, 12))
+
+        # Summary
+        story.append(Paragraph("Summary Statistics", styles['Heading2']))
+        summary_data = [
+            ['Metric', 'Value'],
+            ['Total Properties', str(len(self.df))],
+            ['Average Price', f"${self.df['price'].mean():.2f}"],
+            ['Median Price', f"${self.df['price'].median():.2f}"],
+            ['Average Rooms', f"{self.df['rooms'].mean():.1f}"],
+        ]
+        t_summary = Table(summary_data)
+        t_summary.setStyle(TableStyle([
+            ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ]))
+        story.append(t_summary)
+        story.append(Spacer(1, 20))
+
+        # Properties Table
+        story.append(Paragraph("Property Listings", styles['Heading2']))
+        
+        # Prepare table data
+        # Select key columns for the PDF table to fit page width
+        table_headers = ['City', 'Type', 'Price', 'Rooms', 'Area (sqm)', 'Title']
+        table_data = [table_headers]
+        
+        for _, row in self.df.iterrows():
+            table_data.append([
+                str(row.get('city', '')),
+                str(row.get('property_type', '')),
+                f"${row.get('price', 0)}",
+                str(row.get('rooms', '')),
+                str(row.get('area_sqm', '')),
+                str(row.get('title', ''))[:30] + '...' if len(str(row.get('title', ''))) > 30 else str(row.get('title', ''))
+            ])
+
+        t_props = Table(table_data, colWidths=[60, 60, 50, 40, 50, 180])
+        t_props.setStyle(TableStyle([
+            ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 8),
+            ('ALIGN', (2,1), (4,-1), 'RIGHT'), # Align numbers right
+        ]))
+        
+        story.append(t_props)
+
+        doc.build(story)
+        output.seek(0)
+        return output
 
     def export(
         self,
@@ -340,6 +486,8 @@ class PropertyExporter:
             return self.export_to_json(**kwargs)
         elif format == ExportFormat.MARKDOWN:
             return self.export_to_markdown(**kwargs)
+        elif format == ExportFormat.PDF:
+            return self.export_to_pdf(**kwargs)
         else:
             raise ValueError(f"Unsupported export format: {format}")
 

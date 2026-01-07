@@ -46,3 +46,19 @@ You can access detailed statistics for specific countries and regions:
 3. **Indices Panel**: View the generated price indices and year-over-year (YoY) growth rates.
 
 These insights are automatically included in the **Expert Digest** for your subscribed regions.
+
+## Exporting Data
+
+You can export property listings and search results for offline analysis or sharing.
+
+### Supported Formats
+- **PDF**: Best for sharing and printing. Includes summary statistics and a clean table of properties.
+- **Excel/CSV**: Best for further analysis in spreadsheet software.
+- **JSON**: Best for developers and data integration.
+- **Markdown**: Best for text-based notes and documentation.
+
+### How to Export
+1. Perform a search or view your saved properties.
+2. Click the **Export** button in the sidebar or results view.
+3. Select your desired format (e.g., "PDF Report").
+4. The file will be generated and downloaded automatically.

@@ -28,31 +28,80 @@ Estimates the fair market value of a property using a component-based hedonic pr
 
 ---
 
-## Vector Store
 
-### StrategicReranker
+## PropertyExporter
 
-**Module**: `vector_store.reranker`
+Handles the export of property data to various formats (CSV, Excel, JSON, Markdown, PDF).
 
-Reranks search results based on semantic relevance, metadata, and high-level user strategies.
+### Class: `PropertyExporter`
 
-#### `StrategicReranker(valuation_model=None, ...)`
+```python
+class PropertyExporter:
+    def __init__(self, properties: Union[List[Dict[str, Any]], PropertyCollection, pd.DataFrame]):
+        """
+        Initialize the exporter with property data.
+        
+        Args:
+            properties: List of dictionaries, PropertyCollection, or DataFrame containing property data.
+        """
+```
 
-*   **Args**:
-    *   `valuation_model` (Optional[HedonicValuationModel]): Model to identify undervalued properties for "investor" strategy.
-    *   `boost_exact_matches` (float): Boost for keyword matches (default: 1.5).
-    *   `boost_metadata_match` (float): Boost for user preference matches (default: 1.3).
+### Methods
 
-#### Methods
+#### `export`
 
-*   `rerank_with_strategy(query, documents, strategy="balanced", initial_scores=None, k=None)`
-    *   Applies strategy-specific boosting logic.
-    *   **Strategies**:
-        *   `"investor"`: Prioritizes ROI, yield, and undervalued properties.
-        *   `"family"`: Prioritizes size (rooms, area), amenities (garden, parking), and safety.
-        *   `"bargain"`: Prioritizes lowest absolute price.
-        *   `"balanced"`: Standard relevance ranking.
-    *   **Returns**: List of `(Document, score)` tuples.
+```python
+def export(self, format: ExportFormat, **kwargs) -> Union[str, BytesIO]:
+    """
+    Export properties to the specified format.
+    
+    Args:
+        format: ExportFormat enum value (CSV, EXCEL, JSON, MARKDOWN, PDF).
+        **kwargs: Additional arguments passed to specific export methods.
+        
+    Returns:
+        str or BytesIO: The exported data (string for text formats, BytesIO for binary).
+    """
+```
+
+#### `export_to_pdf`
+
+```python
+def export_to_pdf(self) -> BytesIO:
+    """
+    Export properties to PDF format with a summary and listing table.
+    
+    Returns:
+        BytesIO: Buffer containing the generated PDF file.
+    """
+```
+
+#### `get_filename`
+
+```python
+def get_filename(self, format: ExportFormat, prefix: str = "properties") -> str:
+    """
+    Generate a timestamped filename for the export.
+    
+    Args:
+        format: The export format.
+        prefix: Prefix for the filename.
+        
+    Returns:
+        str: The generated filename (e.g., "properties_20231027_123456.pdf").
+    """
+```
+
+### Enums
+
+#### `ExportFormat`
+
+Supported export formats:
+- `CSV` ("csv")
+- `EXCEL` ("excel")
+- `JSON` ("json")
+- `MARKDOWN` ("markdown")
+- `PDF` ("pdf")
 
 ---
 

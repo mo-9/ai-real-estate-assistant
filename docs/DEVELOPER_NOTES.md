@@ -84,12 +84,15 @@ The `MarketInsights` engine has been extended to support multi-region analysis, 
 *   **Regional Indices**: Generate time-series price indices for multiple countries to track YoY performance.
 
 ### Export Functionality
-*   **Property Exports**: `PropertyExporter` in `utils/exporters.py` supports CSV, Excel, JSON, and Markdown formats.
+*   **Property Exports**: `PropertyExporter` in `utils/exporters.py` supports CSV, Excel, JSON, Markdown, and PDF formats.
 *   **Points of Interest**: Exports now include POI summary statistics (count, closest distance, categories) and detailed lists in Markdown/JSON.
 *   **Usage**:
     ```python
     exporter = PropertyExporter(properties)
+    # Export to Markdown
     md_report = exporter.export_to_markdown()
+    # Export to PDF
+    pdf_report = exporter.export_to_pdf()
     ```
 
 ### Usage Example

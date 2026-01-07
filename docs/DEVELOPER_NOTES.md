@@ -44,3 +44,29 @@ The digest system is built around `DigestGenerator`, which bridges the gap betwe
 ### Testing
 *   **Unit Tests**: `tests/unit/test_digest_generator.py` covers basic data gathering and logic.
 *   **Integration Tests**: `tests/integration/test_digest_generator_integration.py` verifies the flow from `AlertManager` to `DigestGenerator`.
+
+---
+
+## Analytics - Financial Metrics
+
+### Overview
+The `FinancialCalculator` module (`analytics/financial_metrics.py`) provides standardized investment analysis logic used by the Expert Dashboard and potentially by Agents/Tools.
+
+### Key Capabilities
+*   **Mortgage Calculation**: Standard amortization formula.
+*   **Investment Analysis**:
+    *   **Inputs**: Price, Rent, Mortgage Params, Expense Params.
+    *   **Outputs**: `InvestmentMetrics` (Gross/Net Yield, Cap Rate, Cash-on-Cash, Cash Flow).
+    *   **Expenses**: Detailed breakdown handling vacancy, management, tax, insurance, etc.
+
+### Usage Example
+```python
+from analytics.financial_metrics import FinancialCalculator, MortgageParams
+
+metrics = FinancialCalculator.analyze_investment(
+    property_price=250000,
+    monthly_rent=2000,
+    mortgage=MortgageParams(interest_rate=5.5, down_payment_percent=20)
+)
+print(f"CoC Return: {metrics.cash_on_cash_return}%")
+```

@@ -109,7 +109,7 @@
   - [DONE] Base digest (consumer/expert) (est: 2–4 days)
 - Sprint 2 (2–3 weeks)
   - Indices and comparables for CIS/Russia/Turkey/USA/Africa
-  - Yield/ROI, rate/expense scenarios
+  - [DONE] Yield/ROI, rate/expense scenarios
   - PRO filters (energy/year/elevator/parking), multilingual texts
 - Sprint 3 (3–4 weeks)
   - Hedonic fair‑price model and strategic reranker

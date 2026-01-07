@@ -17,9 +17,12 @@ import json
 from pathlib import Path
 
 from data.schemas import Property, PropertyCollection
-from utils import SavedSearch
+from utils import SavedSearch, UserPreferences
 from notifications.email_service import EmailService
 from notifications.email_templates import DigestTemplate
+
+if False:  # TYPE_CHECKING
+    from notifications.digest_generator import DigestGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +294,36 @@ class AlertManager:
         else:
             self._mark_alert_sent(alert_key)
             return True
+
+    def process_digest(
+        self,
+        user_email: str,
+        user_prefs: UserPreferences,
+        saved_searches: List[SavedSearch],
+        digest_generator: "DigestGenerator",
+        digest_type: str = "daily",
+        send_email: bool = True
+    ) -> bool:
+        """
+        Generate and send a digest for a user.
+
+        Args:
+            user_email: User's email address
+            user_prefs: User preferences
+            saved_searches: List of saved searches
+            digest_generator: Generator instance to create digest data
+            digest_type: 'daily' or 'weekly'
+            send_email: Whether to actually send email
+
+        Returns:
+            True if sent successfully
+        """
+        try:
+            data = digest_generator.generate_digest(user_prefs, saved_searches, digest_type)
+            return self.send_digest(user_email, digest_type, data, send_email)
+        except Exception as e:
+            logger.error(f"Error processing digest for {user_email}: {e}")
+            return False
 
     def send_digest(
         self,

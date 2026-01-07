@@ -146,3 +146,18 @@ results = reranker.rerank_with_strategy(
     strategy="investor"
 )
 ```
+
+---
+
+## Data Loading & Performance
+
+### Parallel Data Loading
+*   **Module**: `utils/data_loader.py`
+*   **Purpose**: Loads multiple CSV/Excel files in parallel to reduce blocking time in Streamlit.
+*   **Mechanism**: Uses `ThreadPoolExecutor` to process files concurrently.
+*   **Vectorization**: `DataLoaderCsv` now uses vectorized pandas operations (e.g., `.map()`, `.fillna()`) instead of `.apply()` for 10x-100x speedup on large datasets.
+
+### Vector Store Ingestion
+*   **ChromaDB**: Ingestion is asynchronous and thread-safe.
+*   **Concurrency**: You can control the number of indexing threads by setting `CHROMA_INDEXING_WORKERS` in `.env`. Default is usually 4.
+*   **Optimization**: Embeddings are only generated for new documents (deduplication based on ID).

@@ -115,9 +115,9 @@
   - [DONE] Hedonic fair‑price model and strategic reranker
   - [DONE] Historical map layers
   - [DONE] Points of interest, report export
-  - Performance/cache/parallel ingestion
+  - [DONE] Performance/cache/parallel ingestion
 - Sprint 4 (2 weeks)
-  - Notifications/scheduling/advanced templates
+  - [DONE] Notifications/scheduling/advanced templates
   - Full e2e tests, static checks, stabilization
 
 ## Success Metrics

@@ -32,6 +32,10 @@
 ## Key Data Flows
 - Data load → embeddings → ChromaDB persist → hybrid retrieval → rerank → response
 - Expert Panel → map filters (geo radius, price/rooms/amenities, neutral states) + retrieval filters (listing type, price, sort) + indices/time‑series → export digest
+- **Digest Generation**:
+  - **DigestGenerator**: Orchestrates data gathering from `VectorStore` (new matches for saved searches) and `MarketInsights` (trends/expert data).
+  - **AlertManager**: Triggers generation based on user schedules (daily/weekly) and `UserPreferences`.
+  - **EmailService**: Renders `DigestTemplate` with gathered data (Consumer: top picks, saved searches; Expert: indices, YoY trends).
 
 ---
 

@@ -10,6 +10,8 @@ ai-real-estate-assistant/
 │   ├── DEPLOYMENT.md       # Production deployment
 │   ├── DOCKER.md           # Docker guide
 │   ├── TESTING_GUIDE.md    # Testing
+│   ├── USER_GUIDE.md       # User instructions
+│   ├── DEVELOPER_NOTES.md  # Dev architecture notes
 │   ├── PRD.MD              # Product requirements
 │   └── TODO.MD             # Roadmap
 ├── agents/                 # Query analysis, hybrid orchestration

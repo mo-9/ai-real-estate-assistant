@@ -112,7 +112,7 @@
   - [DONE] Yield/ROI, rate/expense scenarios
   - [DONE] PRO filters (energy/year/elevator/parking), multilingual texts
 - Sprint 3 (3–4 weeks)
-  - Hedonic fair‑price model and strategic reranker
+  - [DONE] Hedonic fair‑price model and strategic reranker
   - [DONE] Historical map layers
   - Points of interest, report export
   - Performance/cache/parallel ingestion

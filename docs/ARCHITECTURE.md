@@ -9,7 +9,8 @@
 - **Market Analytics**: Multi-region indices and comparables (CIS, Russia, Turkey, USA, Africa) via `MarketInsights`.
 - Comparison Dashboard: Interactive side-by-side analysis, radar charts, price trends, amenity matrix
 - Retriever: ChromaDB (semantic + keyword, MMR), AdvancedPropertyRetriever (geo radius, price filters, sorting)
-- Reranker (multi-signal)
+- Strategic Reranker (investor/family/bargain strategies, valuation boost)
+- Hedonic Valuation Model (fair price estimation, undervaluation detection)
 - Response formatter
 
 ## Technology Stack

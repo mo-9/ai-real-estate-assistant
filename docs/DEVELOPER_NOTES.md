@@ -96,3 +96,44 @@ trend = insights.get_price_trend(region="Marmara")
 # Get comparative indices for multiple countries
 df_indices = insights.get_country_indices(countries=["Turkey", "Russia", "USA"])
 ```
+
+---
+
+## Search & Retrieval - Strategic Reranking & Valuation
+
+### Overview
+The search system now includes a `StrategicReranker` that re-orders search results based on high-level user strategies (Investor, Family, Bargain) and a `HedonicValuationModel` that estimates fair market value to identify undervalued properties.
+
+### Components
+
+1.  **HedonicValuationModel (`analytics/valuation_model.py`)**
+    *   **Purpose**: Estimates the fair price of a property based on its characteristics and local market data.
+    *   **Logic**: Uses component-based valuation:
+        *   Base value: Area * Average Price/sqm (from `MarketInsights`).
+        *   Adjustments: Year built, energy rating, floor, amenities (parking, garden, etc.).
+    *   **Output**: `ValuationResult` (Estimated Price, Delta, Status: Undervalued/Fair/Overvalued).
+
+2.  **StrategicReranker (`vector_store/reranker.py`)**
+    *   **Purpose**: Re-ranks vector search results to align with user persona.
+    *   **Strategies**:
+        *   `investor`: Boosts properties with high yield, low price/sqm, or "undervalued" status (via Valuation Model).
+        *   `family`: Boosts properties with 3+ rooms, garden, parking, good energy rating.
+        *   `bargain`: Boosts properties with lowest absolute price.
+        *   `balanced`: Default mix of relevance and quality.
+
+### Usage Example
+```python
+from vector_store.reranker import StrategicReranker
+from analytics.valuation_model import HedonicValuationModel
+
+# Initialize
+valuation_model = HedonicValuationModel(market_insights=insights)
+reranker = StrategicReranker(valuation_model=valuation_model)
+
+# Rerank results
+results = reranker.rerank_with_strategy(
+    query="apartment in Warsaw",
+    documents=docs,
+    strategy="investor"
+)
+```

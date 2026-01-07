@@ -2,19 +2,46 @@ import pytest
 from unittest.mock import MagicMock
 from analytics.valuation_model import HedonicValuationModel, ValuationResult
 from data.schemas import Property
-from analytics.market_insights import MarketInsights, PriceTrend
+from analytics.market_insights import MarketInsights, PriceTrend, LocationInsights
 
 @pytest.fixture
 def mock_market_insights():
     insights = MagicMock(spec=MarketInsights)
+    # Default to None for location insights to test fallback in older tests
+    insights.get_location_insights.return_value = None
     return insights
 
 @pytest.fixture
 def valuation_model(mock_market_insights):
     return HedonicValuationModel(mock_market_insights)
 
+def test_predict_fair_price_with_location_insights(valuation_model, mock_market_insights):
+    # Setup mock location insights
+    mock_loc = MagicMock(spec=LocationInsights)
+    mock_loc.avg_price_per_sqm = 6000.0
+    mock_market_insights.get_location_insights.return_value = mock_loc
+    
+    prop = Property(
+        id="p_loc", 
+        title="Test Prop Loc",
+        city="Warsaw",
+        price=300000,
+        area_sqm=50,
+        rooms=2
+    )
+    
+    # Base value: 50 * 6000 = 300,000
+    # No amenities
+    # Est: 300,000. Actual: 300,000.
+    
+    result = valuation_model.predict_fair_price(prop)
+    
+    assert result.estimated_price == 300000
+    assert result.valuation_status == "fair"
+    mock_market_insights.get_location_insights.assert_called_with("Warsaw")
+
 def test_predict_fair_price_basic(valuation_model, mock_market_insights):
-    # Setup mock trend
+    # Setup mock trend (fallback)
     mock_trend = MagicMock(spec=PriceTrend)
     mock_trend.average_price = 300000  # For 60sqm -> 5000/sqm
     mock_market_insights.get_price_trend.return_value = mock_trend
@@ -25,8 +52,7 @@ def test_predict_fair_price_basic(valuation_model, mock_market_insights):
         city="Warsaw",
         price=250000,
         area_sqm=50,
-        rooms=2,
-        url="http://example.com"
+        rooms=2
     )
     
     result = valuation_model.predict_fair_price(prop)
@@ -55,8 +81,7 @@ def test_predict_fair_price_with_amenities(valuation_model, mock_market_insights
         rooms=2,
         has_parking=True,  # +5%
         has_garden=True,   # +8%
-        energy_rating="A",  # +10%
-        url="http://example.com"
+        energy_rating="A"  # +10%
     )
     
     # Base: 250,000
@@ -84,8 +109,7 @@ def test_predict_fair_price_undervalued(valuation_model, mock_market_insights):
         city="Warsaw",
         price=200000, # Actual
         area_sqm=50,
-        rooms=2,
-        url="http://example.com"
+        rooms=2
     )
     
     # Est: 250,000

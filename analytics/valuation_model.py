@@ -62,24 +62,22 @@ class HedonicValuationModel:
         city = property_data.city
         
         # Default to global stats if city not found
-        # In a real app, we'd handle this more gracefully
         base_price_sqm = 0.0
         
-        # Try to get specific city stats
-        trend = self.market_insights.get_price_trend(city)
-        if trend and trend.average_price > 0:
-            # Estimate sqm price from average price (rough approximation if sqm avg missing)
-            # Ideally MarketInsights should provide avg_price_per_sqm per city
-            # Let's check if we can get better data. 
-            # For now, assume a standard size of 60sqm if not available to derive base
-            base_price_sqm = trend.average_price / 60.0 
+        # 1. Try to get detailed location insights first (includes accurate price/sqm)
+        location_insights = self.market_insights.get_location_insights(city)
         
-        # If we have direct access to the dataframe in market_insights, we could compute it better.
-        # But let's assume we use the public API of MarketInsights.
-        # For this implementation, let's look at `get_location_insights` if it exists or similar.
+        if location_insights and location_insights.avg_price_per_sqm:
+            base_price_sqm = location_insights.avg_price_per_sqm
+        else:
+            # 2. Fallback to trend data (approximate)
+            trend = self.market_insights.get_price_trend(city)
+            if trend and trend.average_price > 0:
+                # Estimate sqm price from average price (rough approximation if sqm avg missing)
+                # Assume a standard size of 60sqm if not available to derive base
+                base_price_sqm = trend.average_price / 60.0 
         
-        # Let's fallback to a simpler logic:
-        # If we can't get reliable local data, we can't value it reliably.
+        # If we still can't get reliable local data, we can't value it reliably.
         if base_price_sqm == 0:
              return ValuationResult(0, 0, 0, 0, "unknown", {})
 

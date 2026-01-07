@@ -9,6 +9,11 @@ just vector similarity.
 from typing import Any, Dict, List, Tuple, Optional, Set, Union
 from langchain_core.documents import Document
 import re
+import logging
+
+from data.schemas import Property
+
+logger = logging.getLogger(__name__)
 
 
 class PropertyReranker:
@@ -272,11 +277,35 @@ class StrategicReranker(PropertyReranker):
                 # Boost high yield / low price per sqm / undervalued
                 # This requires ValuationModel
                 if self.valuation_model:
-                    # Convert doc metadata to Property object (mock or partial)
-                    # For now, we assume we can extract needed fields
-                    pass 
+                    try:
+                        # Convert doc metadata to Property object
+                        # Use loose validation or default values for missing fields to avoid validation errors
+                        prop_data = metadata.copy()
+                        
+                        # Ensure required fields for Property validation if missing
+                        if 'city' not in prop_data:
+                            prop_data['city'] = "Unknown" 
+                        
+                        # Create Property instance (handle potential validation errors)
+                        prop = Property(**prop_data)
+                        
+                        valuation = self.valuation_model.predict_fair_price(prop)
+                        
+                        # Boost based on valuation status
+                        if valuation.valuation_status == "highly_undervalued":
+                            strategy_boost += 0.5
+                        elif valuation.valuation_status == "undervalued":
+                            strategy_boost += 0.3
+                            
+                        # Also boost based on ROI/Yield if available in metadata
+                        # (Assuming calculated elsewhere or estimated)
+                        
+                    except Exception as e:
+                        # Log warning but continue
+                        logger.warning(f"Failed to value property {metadata.get('id')}: {e}")
+                        pass
                 
-                # Simple heuristic boosts if no model
+                # Simple heuristic boosts if no model (or if model failed)
                 if metadata.get("price") and metadata.get("area_sqm"):
                     try:
                         price = float(metadata.get("price"))

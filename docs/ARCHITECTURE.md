@@ -26,7 +26,8 @@
 - **BaseDataProvider**: Abstract base class for all data providers.
 - **CSVDataProvider**: Wrapper around legacy CSV loader, implementing the standard interface.
 - **JSONDataProvider**: Support for local JSON files and external APIs (URL-based), including data normalization and validation.
-- **Data Validation**: Pydantic models (Property, etc.) ensure data consistency.
+- **Data Validation**: Pydantic models (Property, PointOfInterest, etc.) ensure data consistency.
+- **Export System**: Multi-format export (CSV/Excel/JSON/MD) with POI integration via `PropertyExporter`.
 - **Vector Store Optimization (PE006)**:
     - **Non-blocking Initialization**: Lazy loading of IDs to prevent startup freeze.
     - **Async Indexing**: Background thread processing with separated embedding generation (unlocked) and database writing (locked).

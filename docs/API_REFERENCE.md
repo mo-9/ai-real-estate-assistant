@@ -72,4 +72,19 @@ Pydantic model representing a real estate listing.
     *   `city` (str): City name.
     *   `rooms` (float): Number of rooms.
     *   `year_built` (int): Year of construction.
+    *   `points_of_interest` (List[PointOfInterest]): Nearby POIs.
     *   ... (see source for full list)
+
+### PointOfInterest
+
+**Module**: `data.schemas`
+
+Represents a nearby location of interest.
+
+*   **Fields**:
+    *   `name` (str): Name of the place.
+    *   `category` (str): Type (school, park, transport, etc.).
+    *   `distance_meters` (float): Distance from property.
+    *   `latitude` (float): Geo-coordinate.
+    *   `longitude` (float): Geo-coordinate.
+    *   `tags` (Dict[str, str]): Additional OSM tags.

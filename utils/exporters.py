@@ -64,6 +64,17 @@ class PropertyExporter:
             if 'negotiation_rate' in prop_dict and prop_dict['negotiation_rate']:
                 neg_rate = prop_dict['negotiation_rate']
                 prop_dict['negotiation_rate'] = neg_rate.value if hasattr(neg_rate, 'value') else str(neg_rate)
+            
+            # Add POI summary
+            if hasattr(prop, 'points_of_interest') and prop.points_of_interest:
+                prop_dict['poi_count'] = len(prop.points_of_interest)
+                prop_dict['closest_poi_distance'] = min(p.distance_meters for p in prop.points_of_interest)
+                prop_dict['poi_categories'] = ", ".join(sorted(list(set(p.category for p in prop.points_of_interest))))
+            else:
+                prop_dict['poi_count'] = 0
+                prop_dict['closest_poi_distance'] = None
+                prop_dict['poi_categories'] = ""
+
             data.append(prop_dict)
         return pd.DataFrame(data)
 
@@ -284,6 +295,12 @@ class PropertyExporter:
 
             if amenities:
                 lines.append(f"- **Amenities**: {', '.join(amenities)}")
+
+            # Points of Interest
+            if hasattr(prop, 'points_of_interest') and prop.points_of_interest:
+                lines.append("- **Points of Interest**:")
+                for poi in prop.points_of_interest:
+                    lines.append(f"  - {poi.name} ({poi.category}): {int(poi.distance_meters)}m")
 
             if prop.description:
                 lines.append(f"\n{prop.description}")

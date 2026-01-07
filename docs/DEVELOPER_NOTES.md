@@ -83,6 +83,15 @@ The `MarketInsights` engine has been extended to support multi-region analysis, 
 *   **Price Trends**: Analyze price direction and changes for specific geographic scopes.
 *   **Regional Indices**: Generate time-series price indices for multiple countries to track YoY performance.
 
+### Export Functionality
+*   **Property Exports**: `PropertyExporter` in `utils/exporters.py` supports CSV, Excel, JSON, and Markdown formats.
+*   **Points of Interest**: Exports now include POI summary statistics (count, closest distance, categories) and detailed lists in Markdown/JSON.
+*   **Usage**:
+    ```python
+    exporter = PropertyExporter(properties)
+    md_report = exporter.export_to_markdown()
+    ```
+
 ### Usage Example
 ```python
 from analytics import MarketInsights

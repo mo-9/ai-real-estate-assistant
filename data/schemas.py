@@ -131,6 +131,7 @@ class Property(BaseModel):
     price_per_sqm: Optional[float] = Field(None, description="Price per square meter")
     price_in_eur: Optional[float] = Field(None, description="Price converted to EUR for normalization")
     total_monthly_cost: Optional[float] = Field(None, description="Total monthly cost (rent + utilities)")
+    points_of_interest: List['PointOfInterest'] = Field(default_factory=list, description="Nearby points of interest")
 
     class Config:
         """Pydantic model configuration."""
@@ -462,3 +463,15 @@ class UserPreferences(BaseModel):
     favorited_properties: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+
+
+class PointOfInterest(BaseModel):
+    """
+    Represents a point of interest near a property.
+    """
+    name: str = Field(..., description="Name of the POI")
+    category: str = Field(..., description="Category (e.g., school, transport, park)")
+    latitude: float = Field(..., description="Latitude coordinate")
+    longitude: float = Field(..., description="Longitude coordinate")
+    distance_meters: float = Field(..., description="Distance from property in meters")
+    tags: Dict[str, str] = Field(default_factory=dict, description="Additional OSM tags")

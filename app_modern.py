@@ -159,6 +159,15 @@ def initialize_session_state():
     if "use_reranking" not in st.session_state:
         st.session_state.use_reranking = True
 
+    if "reranking_strategy" not in st.session_state:
+        st.session_state.reranking_strategy = "balanced"
+
+    if "reranker" not in st.session_state:
+        # Create reranker with valuation model if available
+        # Ideally we would pass the actual valuation model here
+        # For now we create it without model, or we could initialize it later
+        st.session_state.reranker = create_reranker()
+
     if "hybrid_agent" not in st.session_state:
         st.session_state.hybrid_agent = None
 
@@ -562,6 +571,23 @@ def render_sidebar():
             )
             st.session_state.use_reranking = use_reranking
 
+            if use_reranking:
+                strategy_options = {
+                    "balanced": "Balanced",
+                    "investor": "Investor (Yield/Price)",
+                    "family": "Family (Space/Amenities)",
+                    "bargain": "Bargain (Price)",
+                }
+                
+                selected_strategy = st.selectbox(
+                    "Reranking Strategy",
+                    options=list(strategy_options.keys()),
+                    format_func=lambda x: strategy_options[x],
+                    index=list(strategy_options.keys()).index(st.session_state.reranking_strategy),
+                    key="reranking_strategy_select"
+                )
+                st.session_state.reranking_strategy = selected_strategy
+
             if use_hybrid_agent:
                 st.caption(f"✨ {get_text('agent_tools', lang)}")
 
@@ -891,6 +917,10 @@ def create_conversation_chain():
             callbacks=[stream_handler],
         )
 
+        use_reranking = st.session_state.get("use_reranking", True)
+        reranker = st.session_state.get("reranker") if use_reranking else None
+        strategy = st.session_state.get("reranking_strategy", "balanced")
+
         retriever = svc_create_property_retriever(
             vector_store=st.session_state.vector_store,
             k_results=k_results,
@@ -907,6 +937,8 @@ def create_conversation_chain():
             energy_certs=st.session_state.get("retr_energy_certs"),
             must_have_parking=bool(st.session_state.get("retr_must_parking", False)),
             must_have_elevator=bool(st.session_state.get("retr_must_elevator", False)),
+            reranker=reranker,
+            strategy=strategy,
         )
 
         return svc_create_conversation_chain(
@@ -938,6 +970,10 @@ def create_hybrid_agent_instance():
             streaming=False,
         )
 
+        use_reranking = st.session_state.get("use_reranking", True)
+        reranker = st.session_state.get("reranker") if use_reranking else None
+        strategy = st.session_state.get("reranking_strategy", "balanced")
+
         retriever = svc_create_property_retriever(
             vector_store=st.session_state.vector_store,
             k_results=k_results,
@@ -954,6 +990,8 @@ def create_hybrid_agent_instance():
             energy_certs=st.session_state.get("retr_energy_certs"),
             must_have_parking=bool(st.session_state.get("retr_must_parking", False)),
             must_have_elevator=bool(st.session_state.get("retr_must_elevator", False)),
+            reranker=reranker,
+            strategy=strategy,
         )
 
         return svc_create_hybrid_agent_instance(

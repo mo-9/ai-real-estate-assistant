@@ -11,6 +11,7 @@ from langchain_core.retrievers import BaseRetriever
 from agents.hybrid_agent import create_hybrid_agent
 from models.provider_factory import ModelProviderFactory
 from vector_store.hybrid_retriever import create_retriever
+from vector_store.reranker import StrategicReranker
 
 
 def build_forced_filters(
@@ -69,6 +70,8 @@ def create_property_retriever(
     energy_certs: Optional[List[str]] = None,
     must_have_parking: bool = False,
     must_have_elevator: bool = False,
+    reranker: Optional[StrategicReranker] = None,
+    strategy: str = "balanced",
 ) -> BaseRetriever:
     return create_retriever(
         vector_store=vector_store,
@@ -89,6 +92,8 @@ def create_property_retriever(
             must_have_parking=must_have_parking,
             must_have_elevator=must_have_elevator,
         ),
+        reranker=reranker,
+        strategy=strategy,
     )
 
 

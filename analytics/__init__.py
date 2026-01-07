@@ -8,7 +8,8 @@ from .market_insights import (
     MarketStatistics,
     TrendDirection,
     LocationInsights,
-    PropertyTypeInsights
+    PropertyTypeInsights,
+    HistoricalPricePoint
 )
 from .session_tracker import SessionTracker, SessionStats, EventType
 
@@ -19,6 +20,7 @@ __all__ = [
     'TrendDirection',
     'LocationInsights',
     'PropertyTypeInsights',
+    'HistoricalPricePoint',
     'SessionTracker',
     'SessionStats',
     'EventType'

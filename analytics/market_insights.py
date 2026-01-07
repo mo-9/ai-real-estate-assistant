@@ -9,8 +9,9 @@ This module provides comprehensive market analysis including:
 """
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -39,6 +40,20 @@ class PriceTrend:
     price_range: tuple[float, float]
     sample_size: int
     confidence: str  # "high", "medium", "low"
+
+
+@dataclass
+class HistoricalPricePoint:
+    """Price point for a specific time period."""
+
+    period: str  # e.g., "2023-01" or "2023-Q1"
+    start_date: datetime
+    end_date: datetime
+    average_price: float
+    median_price: float
+    volume: int
+    avg_price_per_sqm: Optional[float] = None
+
 
 
 class MarketStatistics(BaseModel):
@@ -149,9 +164,19 @@ class MarketInsights:
                     "lon": getattr(prop, "longitude", None),
                     "year_built": getattr(prop, "year_built", None),
                     "energy_rating": getattr(prop, "energy_rating", None),
+                    "scraped_at": getattr(prop, "scraped_at", None),
+                    "last_updated": getattr(prop, "last_updated", None),
                 }
             )
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+        
+        # Ensure datetime columns are properly typed
+        if "scraped_at" in df.columns:
+            df["scraped_at"] = pd.to_datetime(df["scraped_at"])
+        if "last_updated" in df.columns:
+            df["last_updated"] = pd.to_datetime(df["last_updated"])
+            
+        return df
 
     def _calculate_statistics(self, df: pd.DataFrame) -> MarketStatistics:
         """Calculate market statistics for a given DataFrame."""
@@ -373,6 +398,89 @@ class MarketInsights:
         else:
             res["avg_price_per_sqm"] = np.nan
         return res
+
+    def get_historical_price_trends(
+        self,
+        interval: str = "month",  # "month", "quarter", "year"
+        city: Optional[str] = None,
+        months_back: int = 12,
+    ) -> List[HistoricalPricePoint]:
+        """
+        Get historical price trends grouped by time interval.
+
+        Args:
+            interval: Grouping interval ("month", "quarter", "year")
+            city: Optional city to filter by
+            months_back: Number of months to look back
+
+        Returns:
+            List of HistoricalPricePoint objects sorted by date
+        """
+        df = self.df.copy()
+
+        # Filter by city
+        if city:
+            df = df[df["city"] == city]
+
+        # Ensure we have dates
+        if "scraped_at" not in df.columns or df["scraped_at"].isnull().all():
+            # Fallback to last_updated if scraped_at is missing
+            if "last_updated" in df.columns and not df["last_updated"].isnull().all():
+                df["date"] = df["last_updated"]
+            else:
+                return []
+        else:
+            df["date"] = df["scraped_at"].fillna(df["last_updated"])
+
+        # Filter by date range
+        start_date = datetime.now() - timedelta(days=months_back * 30)
+        df = df[df["date"] >= start_date]
+
+        if len(df) == 0:
+            return []
+
+        # Group by interval
+        if interval == "month":
+            df["period"] = df["date"].dt.to_period("M")
+        elif interval == "quarter":
+            df["period"] = df["date"].dt.to_period("Q")
+        elif interval == "year":
+            df["period"] = df["date"].dt.to_period("Y")
+        else:
+            raise ValueError(f"Unsupported interval: {interval}")
+
+        # Aggregate
+        results = []
+        grouped = df.groupby("period")
+
+        for period, group in grouped:
+            avg_price = float(group["price"].mean())
+            median_price = float(group["price"].median())
+
+            avg_sqm_price = None
+            if group["area_sqm"].notna().any():
+                valid_area = group[group["area_sqm"].notna()]
+                if not valid_area.empty:
+                    avg_sqm_price = float((valid_area["price"] / valid_area["area_sqm"]).mean())
+
+            # Calculate start/end dates for the period
+            p_start = period.start_time
+            p_end = period.end_time
+
+            results.append(
+                HistoricalPricePoint(
+                    period=str(period),
+                    start_date=p_start,
+                    end_date=p_end,
+                    average_price=avg_price,
+                    median_price=median_price,
+                    volume=len(group),
+                    avg_price_per_sqm=avg_sqm_price,
+                )
+            )
+
+        return sorted(results, key=lambda x: x.start_date)
+
 
     def filter_by_geo_radius(
         self, center_lat: float, center_lon: float, radius_km: float

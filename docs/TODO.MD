@@ -113,7 +113,8 @@
   - [DONE] PRO filters (energy/year/elevator/parking), multilingual texts
 - Sprint 3 (3–4 weeks)
   - Hedonic fair‑price model and strategic reranker
-  - Historical map layers, points of interest, report export
+  - [DONE] Historical map layers
+  - Points of interest, report export
   - Performance/cache/parallel ingestion
 - Sprint 4 (2 weeks)
   - Notifications/scheduling/advanced templates

@@ -153,14 +153,9 @@ class MarketInsights:
             )
         return pd.DataFrame(data)
 
-    def get_overall_statistics(self) -> MarketStatistics:
-        """
-        Calculate comprehensive market statistics.
-
-        Returns:
-            MarketStatistics with overall market metrics
-        """
-        if len(self.df) == 0:
+    def _calculate_statistics(self, df: pd.DataFrame) -> MarketStatistics:
+        """Calculate market statistics for a given DataFrame."""
+        if len(df) == 0:
             return MarketStatistics(
                 total_properties=0,
                 average_price=0,
@@ -178,27 +173,27 @@ class MarketInsights:
 
         # Calculate price per sqm where area is available
         price_per_sqm = None
-        if self.df["area_sqm"].notna().any():
-            valid_area = self.df[self.df["area_sqm"].notna()]
+        if df["area_sqm"].notna().any():
+            valid_area = df[df["area_sqm"].notna()]
             price_per_sqm = (valid_area["price"] / valid_area["area_sqm"]).mean()
 
         # Average area
-        avg_area = self.df["area_sqm"].mean() if self.df["area_sqm"].notna().any() else None
+        avg_area = df["area_sqm"].mean() if df["area_sqm"].notna().any() else None
 
         return MarketStatistics(
-            total_properties=len(self.df),
-            average_price=float(self.df["price"].mean()),
-            median_price=float(self.df["price"].median()),
-            min_price=float(self.df["price"].min()),
-            max_price=float(self.df["price"].max()),
-            std_dev=float(self.df["price"].std()),
-            avg_rooms=float(self.df["rooms"].mean()),
+            total_properties=len(df),
+            average_price=float(df["price"].mean()),
+            median_price=float(df["price"].median()),
+            min_price=float(df["price"].min()),
+            max_price=float(df["price"].max()),
+            std_dev=float(df["price"].std()),
+            avg_rooms=float(df["rooms"].mean()),
             avg_area=float(avg_area) if avg_area is not None and not np.isnan(avg_area) else None,
-            parking_percentage=float(self.df["has_parking"].mean() * 100),
-            garden_percentage=float(self.df["has_garden"].mean() * 100),
-            furnished_percentage=float(self.df["is_furnished"].mean() * 100),
-            cities=self.df["city"].value_counts().to_dict(),
-            property_types=self.df["property_type"].value_counts().to_dict(),
+            parking_percentage=float(df["has_parking"].mean() * 100),
+            garden_percentage=float(df["has_garden"].mean() * 100),
+            furnished_percentage=float(df["is_furnished"].mean() * 100),
+            cities=df["city"].value_counts().to_dict(),
+            property_types=df["property_type"].value_counts().to_dict(),
             avg_price_per_sqm=(
                 float(price_per_sqm)
                 if price_per_sqm is not None and not np.isnan(price_per_sqm)
@@ -206,17 +201,49 @@ class MarketInsights:
             ),
         )
 
-    def get_price_trend(self, city: Optional[str] = None) -> PriceTrend:
+    def get_overall_statistics(self) -> MarketStatistics:
         """
-        Analyze price trends for overall market or specific city.
+        Calculate comprehensive market statistics.
+
+        Returns:
+            MarketStatistics with overall market metrics
+        """
+        return self._calculate_statistics(self.df)
+
+    def get_country_statistics(self, country: str) -> MarketStatistics:
+        """Get statistics for a specific country."""
+        df = self.df[self.df["country"].str.lower() == country.lower()]
+        return self._calculate_statistics(df)
+
+    def get_region_statistics(self, region: str) -> MarketStatistics:
+        """Get statistics for a specific region."""
+        df = self.df[self.df["region"].str.lower() == region.lower()]
+        return self._calculate_statistics(df)
+
+    def get_price_trend(
+        self, 
+        city: Optional[str] = None, 
+        region: Optional[str] = None, 
+        country: Optional[str] = None
+    ) -> PriceTrend:
+        """
+        Analyze price trends for overall market, specific city, region or country.
 
         Args:
             city: Optional city name to filter by
+            region: Optional region name to filter by
+            country: Optional country name to filter by
 
         Returns:
             PriceTrend with trend analysis
         """
-        df = self.df if city is None else self.df[self.df["city"] == city]
+        df = self.df
+        if city:
+            df = df[df["city"] == city]
+        elif region:
+            df = df[df["region"].str.lower() == region.lower()]
+        elif country:
+            df = df[df["country"].str.lower() == country.lower()]
 
         if len(df) < 5:
             return PriceTrend(
@@ -766,3 +793,51 @@ class MarketInsights:
             pass
         latest = grouped.groupby("city").tail(1)
         return latest[["city", "month", "avg_price", "yoy_pct", "count"]]
+
+    def get_country_indices(self, countries: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Get monthly price indices and YoY change for countries.
+        
+        Args:
+            countries: Optional list of countries to filter/include.
+            
+        Returns:
+            DataFrame with country, month, avg_price, yoy_pct, count.
+        """
+        df = self.df.copy()
+        if countries:
+            countries_lower = [c.lower() for c in countries]
+            df = df[df["country"].str.lower().isin(countries_lower)]
+            
+        if "scraped_at" not in df.columns:
+            scraped = []
+            for p in self.properties.properties:
+                scraped.append(getattr(p, "scraped_at", None))
+            while len(scraped) < len(df):
+                scraped.append(None)
+            df["scraped_at"] = scraped[: len(df)]
+            
+        df = df.dropna(subset=["scraped_at"])
+        if len(df) == 0:
+            return pd.DataFrame(columns=["country", "month", "avg_price", "yoy_pct", "count"])
+            
+        df["dt"] = pd.to_datetime(df["scraped_at"])
+        df["month"] = df["dt"].dt.to_period("M").dt.to_timestamp()
+        
+        grouped = (
+            df.groupby(["country", "month"])
+            .agg(avg_price=("price", "mean"), count=("price", "count"))
+            .reset_index()
+            .sort_values(["country", "month"])
+        )
+        
+        grouped["yoy_pct"] = None
+        try:
+            grouped["yoy_pct"] = grouped.groupby("country")["avg_price"].transform(
+                lambda s: (s - s.shift(12)) / s.shift(12) * 100
+            )
+        except Exception:
+            pass
+            
+        latest = grouped.groupby("country").tail(1)
+        return latest[["country", "month", "avg_price", "yoy_pct", "count"]]

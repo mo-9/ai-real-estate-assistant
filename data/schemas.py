@@ -148,8 +148,8 @@ class Property(BaseModel):
     @classmethod
     def validate_price_reasonable(cls, v: float) -> float:
         """Ensure price is within reasonable bounds."""
-        if v > 100000:
-            raise ValueError("Price suspiciously high (>100,000)")
+        if v > 100000000:  # 100 Million
+            raise ValueError("Price suspiciously high (>100,000,000)")
         if v < 50:
             raise ValueError("Price suspiciously low (<50)")
         return v
@@ -318,6 +318,8 @@ class PropertyCollection(BaseModel):
 
     def filter_by_criteria(
         self,
+        country: Optional[str] = None,
+        region: Optional[str] = None,
         city: Optional[str] = None,
         min_price: Optional[float] = None,
         max_price: Optional[float] = None,
@@ -331,6 +333,8 @@ class PropertyCollection(BaseModel):
         Filter properties by various criteria.
 
         Args:
+            country: Filter by country name
+            region: Filter by region name
             city: Filter by city name
             min_price: Minimum price
             max_price: Maximum price
@@ -344,6 +348,18 @@ class PropertyCollection(BaseModel):
             Filtered PropertyCollection
         """
         filtered = self.properties
+
+        if country:
+            filtered = [
+                p for p in filtered 
+                if p.country and p.country.lower() == country.lower()
+            ]
+
+        if region:
+            filtered = [
+                p for p in filtered 
+                if p.region and p.region.lower() == region.lower()
+            ]
 
         if city:
             filtered = [p for p in filtered if p.city.lower() == city.lower()]
@@ -379,6 +395,8 @@ class PropertyCollection(BaseModel):
 class SearchCriteria(BaseModel):
     """User search criteria for property search."""
     query: str = Field(..., description="Natural language search query")
+    country: Optional[str] = None
+    region: Optional[str] = None
     city: Optional[str] = None
     min_price: Optional[float] = Field(None, ge=0)
     max_price: Optional[float] = Field(None, ge=0)

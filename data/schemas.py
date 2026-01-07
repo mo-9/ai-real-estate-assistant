@@ -78,6 +78,8 @@ class Property(BaseModel):
     area_sqm: Optional[float] = Field(None, gt=0, description="Area in square meters")
     floor: Optional[float] = Field(None, description="Floor number")
     total_floors: Optional[float] = Field(None, description="Total floors in building")
+    year_built: Optional[int] = Field(None, ge=1000, le=2030, description="Year of construction")
+    energy_rating: Optional[str] = Field(None, description="Energy efficiency rating (e.g., A, B, C)")
 
     # Financial Information
     price: Optional[float] = Field(None, ge=0, description="Monthly rental price or listing price")
@@ -327,6 +329,10 @@ class PropertyCollection(BaseModel):
         max_rooms: Optional[float] = None,
         has_parking: Optional[bool] = None,
         has_garden: Optional[bool] = None,
+        has_elevator: Optional[bool] = None,
+        year_built_min: Optional[int] = None,
+        year_built_max: Optional[int] = None,
+        energy_ratings: Optional[List[str]] = None,
         property_type: Optional[PropertyType] = None
     ) -> "PropertyCollection":
         """
@@ -342,6 +348,10 @@ class PropertyCollection(BaseModel):
             max_rooms: Maximum number of rooms
             has_parking: Filter by parking availability
             has_garden: Filter by garden availability
+            has_elevator: Filter by elevator availability
+            year_built_min: Minimum year built
+            year_built_max: Maximum year built
+            energy_ratings: List of allowed energy ratings
             property_type: Filter by property type
 
         Returns:
@@ -382,6 +392,21 @@ class PropertyCollection(BaseModel):
         if has_garden is not None:
             filtered = [p for p in filtered if p.has_garden == has_garden]
 
+        if has_elevator is not None:
+            filtered = [p for p in filtered if p.has_elevator == has_elevator]
+
+        if year_built_min is not None:
+            filtered = [p for p in filtered if p.year_built is not None and p.year_built >= year_built_min]
+
+        if year_built_max is not None:
+            filtered = [p for p in filtered if p.year_built is not None and p.year_built <= year_built_max]
+
+        if energy_ratings:
+            filtered = [
+                p for p in filtered 
+                if p.energy_rating and p.energy_rating in energy_ratings
+            ]
+
         if property_type is not None:
             filtered = [p for p in filtered if p.property_type == property_type]
 
@@ -404,6 +429,14 @@ class SearchCriteria(BaseModel):
     max_rooms: Optional[float] = Field(None, ge=0)
     property_type: Optional[PropertyType] = None
     required_amenities: List[str] = Field(default_factory=list)
+    
+    # PRO Filters
+    must_have_parking: Optional[bool] = None
+    must_have_elevator: Optional[bool] = None
+    year_built_min: Optional[int] = None
+    year_built_max: Optional[int] = None
+    energy_ratings: Optional[List[str]] = None
+    
     max_results: int = Field(default=10, ge=1, le=100)
 
     @field_validator('max_price')

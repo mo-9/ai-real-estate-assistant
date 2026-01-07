@@ -148,7 +148,7 @@ class MarketInsights:
                     "lat": getattr(prop, "latitude", None),
                     "lon": getattr(prop, "longitude", None),
                     "year_built": getattr(prop, "year_built", None),
-                    "energy_cert": getattr(prop, "energy_cert", None),
+                    "energy_rating": getattr(prop, "energy_rating", None),
                 }
             )
         return pd.DataFrame(data)
@@ -415,7 +415,7 @@ class MarketInsights:
         must_be_furnished: bool = False,
         year_built_min: Optional[int] = None,
         year_built_max: Optional[int] = None,
-        energy_certs: Optional[List[str]] = None,
+        energy_ratings: Optional[List[str]] = None,
         require_coords: bool = True,
     ) -> pd.DataFrame:
         """Filter the insights DataFrame using geo and attribute constraints.
@@ -438,7 +438,7 @@ class MarketInsights:
             must_be_furnished: If True, keep only furnished properties.
             year_built_min: Optional minimum year built (inclusive).
             year_built_max: Optional maximum year built (inclusive).
-            energy_certs: Optional allowed energy certificates (case-insensitive).
+            energy_ratings: Optional allowed energy ratings (case-insensitive).
             require_coords: If True, drop rows missing lat/lon before filtering.
 
         Returns:
@@ -519,10 +519,10 @@ class MarketInsights:
                 if year_built_max is not None:
                     df = df[df["year_built"].notna() & (df["year_built"] <= int(year_built_max))]
 
-        if energy_certs:
-            allow_energy = {str(x).strip().lower() for x in energy_certs if str(x).strip()}
-            if allow_energy and "energy_cert" in df.columns:
-                df = df[df["energy_cert"].astype(str).str.lower().isin(allow_energy)]
+        if energy_ratings:
+            allowed_ratings = {str(x).upper() for x in energy_ratings}
+            if "energy_rating" in df.columns:
+                 df = df[df["energy_rating"].astype(str).str.upper().isin(allowed_ratings)]
 
         return df
 

@@ -310,6 +310,26 @@ class DataLoaderCsv:
         if 'has_elevator' not in df_final.columns:
             df_final['has_elevator'] = np.random.choice([True, False], size=len(df_final))
 
+        # Year built normalization
+        if 'year_built' not in df_final.columns:
+             year_cols = [col for col in df_final.columns if any(x in col.lower() for x in ['year_built', 'construction_year', 'built_year'])]
+             if year_cols:
+                 df_final = df_final.rename(columns={year_cols[0]: 'year_built'})
+             else:
+                 df_final['year_built'] = np.random.randint(1970, 2025, size=len(df_final))
+        else:
+             df_final['year_built'] = df_final['year_built'].fillna(2000)
+
+        # Energy rating normalization
+        if 'energy_rating' not in df_final.columns:
+             energy_cols = [col for col in df_final.columns if any(x in col.lower() for x in ['energy_rating', 'energy_class', 'epc'])]
+             if energy_cols:
+                 df_final = df_final.rename(columns={energy_cols[0]: 'energy_rating'})
+             else:
+                 df_final['energy_rating'] = np.random.choice(['A', 'B', 'C', 'D', 'E', 'F', 'G'], size=len(df_final))
+        else:
+             df_final['energy_rating'] = df_final['energy_rating'].fillna('C')
+
         # Log added columns and final row count
         header_final = df_final.columns.tolist()
         diff_header = set(header_final) - set(header)

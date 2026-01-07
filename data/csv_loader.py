@@ -233,40 +233,26 @@ class DataLoaderCsv:
         }
         # Ensure columns exist
         if 'latitude' not in df_copy.columns:
-            df_copy['latitude'] = None
+            df_copy['latitude'] = np.nan
         if 'longitude' not in df_copy.columns:
-            df_copy['longitude'] = None
+            df_copy['longitude'] = np.nan
+        
+        # Vectorized fill
         if 'city' in df_copy.columns:
-            def _fill_lat(row: pd.Series) -> float | None:
-                if pd.isna(row.get('latitude')) and pd.notna(row.get('city')):
-                    c = str(row['city']).strip().lower()
-                    return city_coords.get(c, (None, None))[0]
-                val: Any = row.get('latitude')
-                if val is None or pd.isna(val):
-                    return None
-                try:
-                    return float(val)
-                except Exception:
-                    return None
-            def _fill_lon(row: pd.Series) -> float | None:
-                if pd.isna(row.get('longitude')) and pd.notna(row.get('city')):
-                    c = str(row['city']).strip().lower()
-                    return city_coords.get(c, (None, None))[1]
-                val: Any = row.get('longitude')
-                if val is None or pd.isna(val):
-                    return None
-                try:
-                    return float(val)
-                except Exception:
-                    return None
-            df_copy['latitude'] = df_copy.apply(_fill_lat, axis=1)
-            df_copy['longitude'] = df_copy.apply(_fill_lon, axis=1)
-            # Coerce to float where available
-            try:
-                df_copy['latitude'] = df_copy['latitude'].astype(float)
-                df_copy['longitude'] = df_copy['longitude'].astype(float)
-            except Exception:
-                pass
+            # Create normalized city series for lookup
+            cities_normalized = df_copy['city'].astype(str).str.strip().str.lower()
+            
+            # Create mapping series
+            lat_map = cities_normalized.map(lambda x: city_coords.get(x, (None, None))[0])
+            lon_map = cities_normalized.map(lambda x: city_coords.get(x, (None, None))[1])
+            
+            # Fill missing values
+            df_copy['latitude'] = df_copy['latitude'].fillna(lat_map)
+            df_copy['longitude'] = df_copy['longitude'].fillna(lon_map)
+            
+            # Coerce to float
+            df_copy['latitude'] = pd.to_numeric(df_copy['latitude'], errors='coerce')
+            df_copy['longitude'] = pd.to_numeric(df_copy['longitude'], errors='coerce')
 
         # Do not drop rows; allow missing values (schema-agnostic ingestion)
         df_cleaned = df_copy
@@ -300,7 +286,18 @@ class DataLoaderCsv:
 
         # Bathrooms normalization (best effort)
         if 'bathrooms' not in df_final.columns and 'rooms' in df_final.columns:
-            df_final['bathrooms'] = df_final['rooms'].apply(DataLoaderCsv.bathrooms_fake)
+            # Vectorized bathroom estimation
+            df_final['bathrooms'] = 1.0
+            
+            # Find properties with 2+ rooms
+            mask_large = (df_final['rooms'] >= 2)
+            
+            if mask_large.any():
+                # Randomly assign 1.0 or 2.0 to large properties
+                # We use numpy to generate random choices for the masked selection
+                random_baths = np.random.choice([1.0, 2.0], size=mask_large.sum())
+                df_final.loc[mask_large, 'bathrooms'] = random_baths
+                
         elif 'bathrooms' in df_final.columns:
             df_final['bathrooms'] = df_final['bathrooms'].fillna(1.0)
 

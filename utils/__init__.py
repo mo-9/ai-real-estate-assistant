@@ -4,6 +4,7 @@ Utility modules for export, saved searches, and UI helpers.
 
 from .exporters import PropertyExporter, ExportFormat, InsightsExporter
 from .saved_searches import SavedSearchManager, SavedSearch, UserPreferences, FavoriteProperty
+from .data_loader import ParallelDataLoader
 from .ui_helpers import (
     load_and_inject_styles,
     inject_enhanced_form_styles,
@@ -23,6 +24,7 @@ __all__ = [
     'SavedSearch',
     'UserPreferences',
     'FavoriteProperty',
+    'ParallelDataLoader',
     'load_and_inject_styles',
     'inject_enhanced_form_styles',
     'inject_tailwind_cdn',

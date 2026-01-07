@@ -15,6 +15,7 @@ import folium
 from folium import plugins
 from data.schemas import Property, PropertyCollection
 import pandas as pd
+from datetime import datetime, timedelta
 
 
 # Default map center (Poland)
@@ -531,4 +532,104 @@ def create_location_comparison_map(
     # Add layer control
     folium.LayerControl().add_to(m)
 
+    return m
+
+
+def create_historical_trends_map(
+    properties: PropertyCollection,
+    center_city: Optional[str] = None,
+    zoom_start: int = 7
+) -> folium.Map:
+    """
+    Create a map with layers for different time periods to show historical trends.
+    
+    Args:
+        properties: Collection of properties
+        center_city: Optional city to center the map on
+        zoom_start: Initial zoom level
+        
+    Returns:
+        Folium Map object
+    """
+    
+    # Determine map center
+    if center_city:
+        center = _get_city_coordinates(center_city)
+    else:
+        cities = list(set(p.city for p in properties.properties))
+        if cities:
+            coords = [_get_city_coordinates(city) for city in cities]
+            center = [
+                sum(lat for lat, _ in coords) / len(coords),
+                sum(lon for _, lon in coords) / len(coords)
+            ]
+        else:
+            center = DEFAULT_CENTER
+
+    # Create base map
+    m = folium.Map(
+        location=center,
+        zoom_start=zoom_start,
+        tiles='OpenStreetMap'
+    )
+    
+    now = datetime.now()
+    
+    # Define time periods
+    periods = {
+        'Last 30 Days': (now - timedelta(days=30), now),
+        'Last Quarter': (now - timedelta(days=90), now - timedelta(days=30)),
+        'Last Year': (now - timedelta(days=365), now - timedelta(days=90)),
+        'Older': (datetime.min, now - timedelta(days=365))
+    }
+    
+    # Create feature groups for each period
+    groups = {name: folium.FeatureGroup(name=name) for name in periods}
+    
+    # Add groups to map
+    for group in groups.values():
+        group.add_to(m)
+        
+    # Sort properties into groups
+    import random
+    
+    for prop in properties.properties:
+        scraped_at = prop.scraped_at or now # Default to now if missing
+        
+        # Find matching period
+        target_group = None
+        for name, (start, end) in periods.items():
+            if start <= scraped_at <= end:
+                target_group = groups[name]
+                break
+                
+        if target_group:
+            coords = list(get_property_coords(prop))
+            # Jitter
+            coords = [
+                coords[0] + random.uniform(-0.01, 0.01),
+                coords[1] + random.uniform(-0.01, 0.01)
+            ]
+            
+            # Color based on period (optional, or stick to price)
+            # Let's stick to price color but use opacity or shape?
+            # For simplicity, keep price color.
+            color = _get_price_color(prop.price)
+            
+            popup_html = _create_property_popup(prop)
+            
+            folium.CircleMarker(
+                location=coords,
+                radius=8,
+                popup=folium.Popup(popup_html, max_width=300),
+                color=color,
+                fill=True,
+                fillColor=color,
+                fillOpacity=0.7,
+                weight=2
+            ).add_to(target_group)
+            
+    # Add layer control
+    folium.LayerControl().add_to(m)
+    
     return m

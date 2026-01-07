@@ -589,6 +589,7 @@ class TestDigestScheduler:
                     bathrooms=2,
                     area_sqm=75,
                     property_type=PropertyType.APARTMENT,
+                    scraped_at=datetime.now(),
                 )
             ],
             total_count=1,
@@ -608,7 +609,7 @@ class TestDigestScheduler:
         assert result["sent"]["weekly"] == 1
         email_service.send_email.assert_called_once()
         sent_body = email_service.send_email.call_args.kwargs["body"]
-        assert "Expert Digest" in sent_body
+        assert "Expert Market Insights" in sent_body
 
 
 # ============================================================================

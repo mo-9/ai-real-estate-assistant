@@ -6,7 +6,7 @@ of retrieved documents by considering additional factors beyond
 just vector similarity.
 """
 
-from typing import Any, Dict, List, Tuple, Optional, Set
+from typing import Any, Dict, List, Tuple, Optional, Set, Union
 from langchain_core.documents import Document
 import re
 
@@ -376,14 +376,18 @@ class SimpleReranker:
         return reranked
 
 
-def create_reranker(valuation_model: Any = None) -> StrategicReranker:
+def create_reranker(valuation_model: Any = None, advanced: bool = True) -> Union[StrategicReranker, SimpleReranker]:
     """
     Factory function to create a StrategicReranker.
     
     Args:
         valuation_model: Optional valuation model for investor strategy
+        advanced: Whether to use advanced StrategicReranker or SimpleReranker
         
     Returns:
-        Configured StrategicReranker
+        Configured Reranker
     """
-    return StrategicReranker(valuation_model=valuation_model)
+    if advanced:
+        return StrategicReranker(valuation_model=valuation_model)
+    else:
+        return SimpleReranker()

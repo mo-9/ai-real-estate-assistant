@@ -110,7 +110,7 @@
 - Sprint 2 (2–3 weeks)
   - [DONE] Indices and comparables for CIS/Russia/Turkey/USA/Africa
   - [DONE] Yield/ROI, rate/expense scenarios
-  - PRO filters (energy/year/elevator/parking), multilingual texts
+  - [DONE] PRO filters (energy/year/elevator/parking), multilingual texts
 - Sprint 3 (3–4 weeks)
   - Hedonic fair‑price model and strategic reranker
   - Historical map layers, points of interest, report export

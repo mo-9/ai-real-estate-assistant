@@ -87,33 +87,66 @@ class QueryAnalyzer:
     # Keywords for intent classification
     RETRIEVAL_KEYWORDS = [
         "show", "find", "list", "search", "get", "display",
-        "want", "need", "looking for", "give me"
+        "want", "need", "looking for", "give me",
+        "показать", "найти", "список", "поиск", "дать",  # RU
+        "göster", "bul", "listele", "ara", "ver", "istiyorum",  # TR
     ]
 
     COMPARISON_KEYWORDS = [
         "compare", "versus", "vs", "difference", "between",
-        "better", "cheaper", "more expensive", "bigger", "smaller"
+        "better", "cheaper", "more expensive", "bigger", "smaller",
+        "сравнить", "против", "разница", "между", "лучше", "дешевле",  # RU
+        "karşılaştır", "fark", "arasında", "daha iyi", "daha ucuz",  # TR
     ]
 
     CALCULATION_KEYWORDS = [
         "calculate", "compute", "how much", "total cost",
-        "monthly payment", "mortgage", "interest", "loan"
+        "monthly payment", "mortgage", "interest", "loan",
+        "рассчитать", "посчитать", "сколько", "ипотека", "кредит",  # RU
+        "hesapla", "ne kadar", "toplam", "kredi", "ipotek",  # TR
     ]
 
     ANALYSIS_KEYWORDS = [
         "average", "mean", "median", "statistics", "trend",
-        "distribution", "analyze", "analysis", "insights"
+        "distribution", "analyze", "analysis", "insights",
+        "средняя", "медиана", "статистика", "тренд", "анализ",  # RU
+        "ortalama", "medyan", "istatistik", "trend", "analiz",  # TR
     ]
 
     RECOMMENDATION_KEYWORDS = [
         "recommend", "suggest", "best", "optimal", "top",
-        "ideal", "perfect", "most suitable"
+        "ideal", "perfect", "most suitable",
+        "порекомендуй", "лучший", "топ", "идеальный",  # RU
+        "öner", "tavsiye", "en iyi", "ideal", "mükemmel",  # TR
     ]
 
     # Filter extraction patterns
+    # Price: match currency symbols or explicitly "price"/"cost" context if just number
+    # For now, keeping simple but avoiding 4-digit years in specific ranges if possible?
+    # Actually, let's keep the pattern but filter results later.
     PRICE_PATTERN = re.compile(r'\$?\d{1,5}(?:,\d{3})*(?:\.\d{2})?')
-    ROOMS_PATTERN = re.compile(r'(\d+)[- ](?:bed(?:room)?|room)')
-    CITY_PATTERN = re.compile(r'\b(warsaw|krakow|gdansk|wroclaw|poznan)\b', re.IGNORECASE)
+    ROOMS_PATTERN = re.compile(r'(\d+)[- ](?:bed(?:room)?|room|комнат|odalı)')
+    CITY_PATTERN = re.compile(r'\b(warsaw|krakow|gdansk|wroclaw|poznan|warszawa|kraków|gdańsk|wrocław|poznań|варшав|краков|гданьск|вроцлав|познан|varşova)\w*', re.IGNORECASE)
+    # Added 'построен' (built) and 'yapı' (building/built) stems
+    YEAR_PATTERN = re.compile(r'(?:built|year|год|yıl|построен|yapı)[\D]{0,10}(\d{4})', re.IGNORECASE)
+    # Allow suffixes on class/rating words (e.g. sınıf-ı, класс-а)
+    ENERGY_PATTERN = re.compile(r'(?:energy|epc|энергия|enerji)(?:\s+(?:class|rating|класс|sınıf)\w*)?\s+([A-G])\b', re.IGNORECASE)
+
+    # City normalization map
+    CITY_VARIANTS = {
+        'Warsaw': ['warsaw', 'warszawa', 'варшав', 'varşova'],
+        'Krakow': ['krakow', 'kraków', 'краков'],
+        'Gdansk': ['gdansk', 'gdańsk', 'гданьск'],
+        'Wroclaw': ['wroclaw', 'wrocław', 'вроцлав'],
+        'Poznan': ['poznan', 'poznań', 'познан'],
+    }
+
+    # Multilingual Amenities - using stems for better matching
+    PARKING_KEYWORDS = {'parking', 'garage', 'парковк', 'гараж', 'otopark', 'garaj'}  # парковк(а/и/ой)
+    GARDEN_KEYWORDS = {'garden', 'yard', 'сад', 'двор', 'bahçe'}
+    POOL_KEYWORDS = {'pool', 'бассейн', 'havuz'}
+    FURNISHED_KEYWORDS = {'furnished', 'мебель', 'меблир', 'eşyalı', 'mobilyalı'}  # меблир(ованная)
+    ELEVATOR_KEYWORDS = {'elevator', 'lift', 'лифт', 'asansör', 'winda'}
 
     def analyze(self, query: str) -> QueryAnalysis:
         """
@@ -198,11 +231,28 @@ class QueryAnalyzer:
         """Extract structured filters from query."""
         filters: Dict[str, Any] = {}
 
+        # Extract year
+        year_match = self.YEAR_PATTERN.search(query)
+        year_val = None
+        if year_match:
+            year_val = int(year_match.group(1))
+            filters['year_built_min'] = year_val
+
         # Extract price
         prices = self.PRICE_PATTERN.findall(query)
         if prices:
             # Clean and convert
-            price_values = [float(p.replace('$', '').replace(',', '')) for p in prices]
+            price_values = []
+            for p in prices:
+                try:
+                    val = float(p.replace('$', '').replace(',', ''))
+                    # Filter out the year value if it was captured as a price
+                    if year_val and abs(val - year_val) < 0.1:
+                        continue
+                    price_values.append(val)
+                except ValueError:
+                    continue
+
             if len(price_values) == 1:
                 filters['max_price'] = price_values[0]
             elif len(price_values) >= 2:
@@ -217,18 +267,37 @@ class QueryAnalyzer:
         # Extract city
         city_match = self.CITY_PATTERN.search(query)
         if city_match:
-            filters['city'] = city_match.group(1).title()
+            city_str = city_match.group(0).lower()
+            found_city = None
+            for canonical, variants in self.CITY_VARIANTS.items():
+                if any(v in city_str for v in variants):
+                    found_city = canonical
+                    break
+            
+            if found_city:
+                filters['city'] = found_city
+            else:
+                filters['city'] = city_match.group(1).title()
 
         # Extract amenities
         query_lower = query.lower()
-        if 'parking' in query_lower or 'garage' in query_lower:
+        if any(kw in query_lower for kw in self.PARKING_KEYWORDS):
             filters['has_parking'] = True
-        if 'garden' in query_lower or 'yard' in query_lower:
+            filters['must_have_parking'] = True
+        if any(kw in query_lower for kw in self.GARDEN_KEYWORDS):
             filters['has_garden'] = True
-        if 'pool' in query_lower:
+        if any(kw in query_lower for kw in self.POOL_KEYWORDS):
             filters['has_pool'] = True
-        if 'furnished' in query_lower:
+        if any(kw in query_lower for kw in self.FURNISHED_KEYWORDS):
             filters['is_furnished'] = True
+        if any(kw in query_lower for kw in self.ELEVATOR_KEYWORDS):
+            filters['must_have_elevator'] = True
+            filters['has_elevator'] = True
+
+        # Extract energy
+        energy_match = self.ENERGY_PATTERN.search(query)
+        if energy_match:
+            filters['energy_ratings'] = [energy_match.group(1).upper()]
 
         return filters
 

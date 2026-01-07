@@ -72,6 +72,7 @@ from utils import (
     InsightsExporter,
     PropertyExporter,
     SavedSearchManager,
+    ParallelDataLoader,
     inject_enhanced_form_styles,
     inject_tailwind_cdn,
     load_and_inject_styles,
@@ -252,7 +253,85 @@ def render_sidebar():
                 st.session_state.language = selected_lang
                 st.rerun()
 
-            # removed: autoload toggle moved to Data Sources
+        # Notification Settings (collapsible)
+        with st.expander(f"🔔 {get_text('notifications', lang) if lang != 'en' else 'Notifications'}", expanded=False):
+            # Email configuration
+            current_email = st.session_state.user_email
+            new_email = st.text_input("Email Address", value=current_email, key="notification_email_input")
+            
+            if new_email != current_email:
+                st.session_state.user_email = new_email
+                # Update prefs if manager exists
+                if st.session_state.notification_prefs_manager:
+                    prefs = st.session_state.notification_prefs_manager.get_preferences(new_email)
+                    # We might want to auto-save or wait for explicit save
+            
+            if st.session_state.user_email:
+                prefs_manager = st.session_state.notification_prefs_manager
+                user_prefs = prefs_manager.get_preferences(st.session_state.user_email)
+                
+                # Enable/Disable Toggle
+                notifications_enabled = st.checkbox(
+                    "Enable Notifications", 
+                    value=user_prefs.email_enabled,
+                    key="notifications_enabled_toggle"
+                )
+                
+                # Frequency Selection
+                freq_options = [f.value for f in AlertFrequency]
+                selected_freq = st.selectbox(
+                    "Digest Frequency",
+                    options=freq_options,
+                    index=freq_options.index(user_prefs.digest_frequency) if user_prefs.digest_frequency in freq_options else 0,
+                    key="digest_freq_select"
+                )
+                
+                # Day Selection (if weekly)
+                if selected_freq == AlertFrequency.WEEKLY.value:
+                    day_options = [d.value for d in DigestDay]
+                    selected_day = st.selectbox(
+                        "Digest Day",
+                        options=day_options,
+                        index=day_options.index(user_prefs.digest_day) if user_prefs.digest_day in day_options else 0,
+                        key="digest_day_select"
+                    )
+                else:
+                    selected_day = user_prefs.digest_day
+
+                # Instant Alerts Toggle
+                instant_alerts = st.checkbox(
+                    "Instant Alerts (Price Drops)",
+                    value=user_prefs.instant_alerts_enabled,
+                    key="instant_alerts_toggle"
+                )
+                
+                # Save Button
+                if st.button("Save Preferences", key="save_notification_prefs"):
+                    updated_prefs = user_prefs
+                    updated_prefs.email_enabled = notifications_enabled
+                    updated_prefs.digest_frequency = selected_freq
+                    updated_prefs.digest_day = selected_day
+                    updated_prefs.instant_alerts_enabled = instant_alerts
+                    
+                    prefs_manager.update_preferences(st.session_state.user_email, updated_prefs)
+                    st.success("Preferences saved!")
+                    
+                # Test Email Button
+                if st.button("Send Test Email", key="send_test_email"):
+                    if st.session_state.email_service:
+                        with st.spinner("Sending test email..."):
+                            success = st.session_state.email_service.send_test_email(
+                                st.session_state.user_email,
+                                user_name="User" 
+                            )
+                            if success:
+                                st.success(f"Test email sent to {st.session_state.user_email}!")
+                            else:
+                                st.error("Failed to send test email. Check logs.")
+                    else:
+                        st.error("Email service not configured. Check .env file.")
+            else:
+                st.info("Enter your email to configure notifications.")
 
         st.divider()
 
@@ -786,36 +865,25 @@ def load_local_files(uploaded_files):
     lang = st.session_state.language
 
     try:
+        # Progress tracking
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        def update_progress(progress: float, message: str):
+            progress_bar.progress(progress)
+            status_text.text(message)
+
         with st.spinner(get_text("loading_local_files", lang)):
+            # Use ParallelDataLoader for faster processing
+            loader = ParallelDataLoader(max_workers=min(len(uploaded_files), 4))
+            collections = loader.load_files(uploaded_files, progress_callback=update_progress)
+            
             all_properties = []
-
-            import pandas as pd
-
-            for uploaded_file in uploaded_files:
-                st.info(f"📄 Processing: {uploaded_file.name}")
-
-                name_lower = uploaded_file.name.lower()
-                try:
-                    if name_lower.endswith(".xlsx") or name_lower.endswith(".xls"):
-                        df = pd.read_excel(uploaded_file)
-                    else:
-                        df = pd.read_csv(uploaded_file)
-                except ImportError as e:
-                    raise ImportError(
-                        "Excel input requires optional dependencies: openpyxl (.xlsx) or xlrd (.xls)."
-                    ) from e
-                st.info(f"📊 Loaded {len(df)} rows from {uploaded_file.name}")
-
-                # Use DataLoaderCsv static method to format the data
-                df_formatted = DataLoaderCsv.format_df(df)
-                st.info(f"✨ Formatted {len(df_formatted)} properties from {uploaded_file.name}")
-
-                # Convert to PropertyCollection
-                collection_part = PropertyCollection.from_dataframe(
-                    df_formatted, source=uploaded_file.name
-                )
-
-                all_properties.extend(collection_part.properties)
+            
+            for i, collection in enumerate(collections):
+                all_properties.extend(collection.properties)
+                # Show summary for each file
+                st.toast(f"✅ Loaded {len(collection.properties)} properties from file {i+1}")
 
             if all_properties:
                 if st.session_state.property_collection:
@@ -852,8 +920,13 @@ def load_local_files(uploaded_files):
                 st.session_state.data_loaded = True
             else:
                 st.warning(f"{get_text('no_data', lang)}")
+        
+        # Clear progress
+        progress_bar.empty()
+        status_text.empty()
 
     except Exception as e:
+        logger.error(f"Error loading files: {e}")
         st.error(f"❌ {get_text('error_occurred', lang)}: {str(e)}")
         # Show more details in an expander
         with st.expander("🔍 Error Details"):

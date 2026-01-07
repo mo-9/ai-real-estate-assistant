@@ -585,21 +585,42 @@ class DigestTemplate(EmailTemplate):
             content += drops_cards
             content += "</div>\n"
 
-        if digest_type == "weekly" and expert:
-            city_indices = expert.get("city_indices") if isinstance(expert, dict) else []
-            yoy_up = expert.get("yoy_top_up") if isinstance(expert, dict) else []
-            yoy_down = expert.get("yoy_top_down") if isinstance(expert, dict) else []
-            content += """
+        if expert:
+            # Check for different expert data structures
+            city_indices = expert.get("city_indices")
+            yoy_up = expert.get("yoy_top_up")
+            yoy_down = expert.get("yoy_top_down")
+            market_table = expert.get("market_table")
+            analysis = expert.get("analysis")
+
+            if city_indices or yoy_up or yoy_down or market_table:
+                content += """
 <div style="margin: 30px 0; padding-top: 10px; border-top: 1px solid {border};">
-    <h2 style="color: {primary}; margin-top: 0;">🧠 Expert Digest</h2>
+    <h2 style="color: {primary}; margin-top: 0;">🧠 Expert Market Insights</h2>
 </div>
 """.format(
-                border=EmailTemplate.COLORS["border"],
-                primary=EmailTemplate.COLORS["primary"],
-            )
-            content += _render_expert_table("City Price Indices (Top 10)", city_indices or [])
-            content += _render_expert_table("YoY — Top Gainers", yoy_up or [])
-            content += _render_expert_table("YoY — Top Decliners", yoy_down or [])
+                    border=EmailTemplate.COLORS["border"],
+                    primary=EmailTemplate.COLORS["primary"],
+                )
+
+            if analysis:
+                content += f"""
+<div style="margin-bottom: 20px; font-style: italic; color: {EmailTemplate.COLORS['text']};">
+    "{analysis}"
+</div>
+"""
+
+            if market_table:
+                content += _render_expert_table("Market Trends", market_table)
+            
+            if city_indices:
+                content += _render_expert_table("City Price Indices (Top 10)", city_indices)
+            
+            if yoy_up:
+                content += _render_expert_table("YoY — Top Gainers", yoy_up)
+                
+            if yoy_down:
+                content += _render_expert_table("YoY — Top Decliners", yoy_down)
 
         content += f"""
 <div style="text-align: center; margin: 30px 0;">

@@ -15,6 +15,7 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 
 from .chroma_store import ChromaPropertyStore
+from .reranker import StrategicReranker, PropertyReranker
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,12 @@ class HybridPropertyRetriever(BaseRetriever):
     1. Using semantic search for understanding intent
     2. Applying metadata filters for precise criteria
     3. Ensuring diversity in results
+    4. Reranking results based on strategy (optional)
     """
 
     vector_store: ChromaPropertyStore
+    reranker: Optional[StrategicReranker] = None
+    strategy: str = "balanced"
     k: int = 5
     search_type: str = "mmr"  # Maximum Marginal Relevance
     fetch_k: int = 20
@@ -63,6 +67,7 @@ class HybridPropertyRetriever(BaseRetriever):
         candidate_k = max(self.fetch_k, self.k)
 
         # Perform semantic search
+        initial_scores = None
         if self.search_type == "mmr":
             # Use MMR for diversity
             retriever = self.vector_store.get_retriever(
@@ -73,6 +78,8 @@ class HybridPropertyRetriever(BaseRetriever):
                 filter=filters if filters else None,
             )
             results = retriever.get_relevant_documents(query)
+            # MMR doesn't return scores, so we assume uniform or rely on rank
+            initial_scores = [1.0 - (i * 0.01) for i in range(len(results))]
 
         else:
             # Use regular similarity search
@@ -82,10 +89,49 @@ class HybridPropertyRetriever(BaseRetriever):
                 filter=filters if filters else None,
             )
             results = [doc for doc, score in results_with_scores]
+            initial_scores = [score for doc, score in results_with_scores]
 
         # Apply post-filtering if needed
         if filters:
-            results = self._apply_filters(results, filters)
+            # Note: If we filtered out documents, we need to filter scores too
+            # This is a bit tricky if we separated them.
+            # Let's re-pair them if we need to filter
+            if initial_scores:
+                paired = list(zip(results, initial_scores))
+                filtered_paired = []
+                for doc, score in paired:
+                     # Reuse _apply_filters logic for single doc?
+                     # No, _apply_filters takes a list.
+                     # Let's just filter the list of docs and keep scores for those that remain.
+                     # This is slightly inefficient but safe.
+                     pass
+                
+                # Simpler: just re-run filter on docs
+                filtered_results = self._apply_filters(results, filters)
+                
+                # Keep scores for surviving docs
+                # We need to map doc ID to score
+                score_map = {id(d): s for d, s in zip(results, initial_scores)}
+                results = filtered_results
+                initial_scores = [score_map.get(id(d), 0.0) for d in results]
+            else:
+                results = self._apply_filters(results, filters)
+
+        # Apply Reranking if enabled
+        if self.reranker:
+            try:
+                reranked = self.reranker.rerank_with_strategy(
+                    query=query,
+                    documents=results,
+                    strategy=self.strategy,
+                    initial_scores=initial_scores,
+                    k=self.k
+                )
+                results = [doc for doc, score in reranked]
+            except Exception as e:
+                logger.warning(f"Reranking failed: {e}")
+                # Fallback to original results
+                pass
 
         return results[:self.k]
 
@@ -198,6 +244,7 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
                 filters[forced_key] = forced_val
         candidate_k = max(self.fetch_k, self.k)
 
+        initial_scores = None
         if self.search_type == "mmr":
             retriever = self.vector_store.get_retriever(
                 search_type="mmr",
@@ -207,6 +254,7 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
                 filter=filters if filters else None,
             )
             results = retriever.get_relevant_documents(query)
+            initial_scores = [1.0 - (i * 0.01) for i in range(len(results))]
         else:
             results_with_scores = self.vector_store.search(
                 query=query,
@@ -214,21 +262,56 @@ class AdvancedPropertyRetriever(HybridPropertyRetriever):
                 filter=filters if filters else None,
             )
             results = [doc for doc, score in results_with_scores]
+            initial_scores = [score for doc, score in results_with_scores]
+
+        # Helper to filter results and scores together
+        def apply_filtering(docs, scores, filter_func):
+            if not docs:
+                return [], []
+            
+            # Map doc ID to score
+            score_map = {id(d): s for d, s in zip(docs, scores)}
+            
+            # Apply filter
+            filtered_docs = filter_func(docs)
+            
+            # Reconstruct scores
+            filtered_scores = [score_map.get(id(d), 0.0) for d in filtered_docs]
+            return filtered_docs, filtered_scores
 
         if filters:
-            results = self._apply_filters(results, filters)
+            results, initial_scores = apply_filtering(results, initial_scores, lambda d: self._apply_filters(d, filters))
 
         if self.min_price is not None or self.max_price is not None:
-            results = self._filter_by_price(results)
+            results, initial_scores = apply_filtering(results, initial_scores, self._filter_by_price)
 
         if self.center_lat is not None and self.center_lon is not None and self.radius_km is not None:
-            results = self._filter_by_geo(results)
+            results, initial_scores = apply_filtering(results, initial_scores, self._filter_by_geo)
 
         if self.year_built_min is not None or self.year_built_max is not None:
-            results = self._filter_by_year_built(results)
+            results, initial_scores = apply_filtering(results, initial_scores, self._filter_by_year_built)
 
         if self.energy_certs:
-            results = self._filter_by_energy_certs(results)
+            results, initial_scores = apply_filtering(results, initial_scores, self._filter_by_energy_certs)
+
+        # Rerank BEFORE sorting?
+        # Usually reranking provides a better sort.
+        # But if explicit sort_by is set (e.g. "price"), user wants that order.
+        # If sort_by is NOT set, we use reranking score.
+        
+        if self.reranker and not self.sort_by:
+            try:
+                reranked = self.reranker.rerank_with_strategy(
+                    query=query,
+                    documents=results,
+                    strategy=self.strategy,
+                    initial_scores=initial_scores,
+                    k=self.k
+                )
+                results = [doc for doc, score in reranked]
+                # No need to update initial_scores as we are done with scoring
+            except Exception as e:
+                logger.warning(f"Reranking failed: {e}")
 
         if self.sort_by:
             results = self._sort_results(results)
@@ -359,6 +442,8 @@ def create_retriever(
     year_built_max: Optional[int] = None,
     energy_certs: Optional[List[str]] = None,
     forced_filters: Optional[Dict[str, Any]] = None,
+    reranker: Optional[StrategicReranker] = None,
+    strategy: str = "balanced",
     **kwargs: Any
 ) -> BaseRetriever:
     """
@@ -372,6 +457,8 @@ def create_retriever(
         max_price: Maximum price filter
         sort_by: Field to sort by
         sort_ascending: Whether to sort ascending when sort_by is set
+        reranker: Optional StrategicReranker instance
+        strategy: Reranking strategy
         **kwargs: Additional retriever parameters
 
     Returns:
@@ -398,6 +485,8 @@ def create_retriever(
             year_built_max=year_built_max,
             energy_certs=energy_certs,
             forced_filters=forced_filters,
+            reranker=reranker,
+            strategy=strategy,
             **kwargs
         )
 
@@ -407,5 +496,7 @@ def create_retriever(
         k=k,
         search_type=search_type,
         forced_filters=forced_filters,
+        reranker=reranker,
+        strategy=strategy,
         **kwargs
     )

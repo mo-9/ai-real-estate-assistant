@@ -49,6 +49,7 @@ class AppSettings(BaseModel):
     google_api_key: Optional[str] = Field(default_factory=lambda: os.getenv("GOOGLE_API_KEY"))
     grok_api_key: Optional[str] = Field(default_factory=lambda: os.getenv("XAI_API_KEY"))
     deepseek_api_key: Optional[str] = Field(default_factory=lambda: os.getenv("DEEPSEEK_API_KEY"))
+    tavily_api_key: Optional[str] = Field(default_factory=lambda: os.getenv("TAVILY_API_KEY"))
     # API Access Control
     api_access_key: Optional[str] = Field(default_factory=lambda: os.getenv("API_ACCESS_KEY"))
     api_access_keys: list[str] = Field(
@@ -85,7 +86,7 @@ class AppSettings(BaseModel):
 
     # Model Defaults
     default_provider: str = Field(
-        default_factory=lambda: os.getenv("DEFAULT_PROVIDER", "openai").strip() or "openai",
+        default_factory=lambda: os.getenv("DEFAULT_PROVIDER", "ollama").strip() or "ollama",
         description="Default LLM provider",
     )
     default_model: Optional[str] = Field(

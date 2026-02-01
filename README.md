@@ -286,9 +286,7 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ## 👤 Author
 
-**Alex Nesterovich**
-- GitHub: [@AleksNeStu](https://github.com/AleksNeStu)
-- Repository: [ai-real-estate-assistant](https://github.com/AleksNeStu/ai-real-estate-assistant)
+Mohamed Hammad
 
 ---
 
@@ -304,10 +302,7 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ## 📞 Support
 
-For questions or issues:
-- Create an [Issue](https://github.com/AleksNeStu/ai-real-estate-assistant/issues)
-- Check existing [Discussions](https://github.com/AleksNeStu/ai-real-estate-assistant/discussions)
-- Review the [PRD](docs/PRD.MD) for detailed specifications
+
 
 ---
 
@@ -317,6 +312,7 @@ For questions or issues:
 
 Made with ❤️ using Python, FastAPI, and Next.js
 
-Copyright © 2026 [Alex Nesterovich](https://github.com/AleksNeStu)
+Copyright © 2026 Mohamed Hammad
 
 </div>
+

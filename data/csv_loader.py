@@ -155,6 +155,26 @@ class DataLoaderCsv:
         # Camel case to snake for header first
         df_copy.columns = [DataLoaderCsv.camel_to_snake(col) for col in df_copy.columns]
 
+        # Normalize common address/location fields (UAE schema support)
+        if "location" not in df_copy.columns:
+            if "display_address" in df_copy.columns:
+                df_copy["location"] = df_copy["display_address"]
+            elif "displayaddress" in df_copy.columns:
+                df_copy["location"] = df_copy["displayaddress"]
+            elif "address" in df_copy.columns:
+                df_copy["location"] = df_copy["address"]
+
+        def _extract_city_from_location(value: object) -> str:
+            if value is None or (isinstance(value, float) and pd.isna(value)):
+                return "Unknown"
+            raw = str(value)
+            parts = [p.strip() for p in re.split(r"[|,]", raw) if p.strip()]
+            if not parts:
+                return "Unknown"
+            if parts[-1].lower() in {"uae", "united arab emirates"} and len(parts) > 1:
+                return parts[-2]
+            return parts[-1]
+
         # Map common synonyms to canonical schema keys (best effort)
         if "price" not in df_copy.columns:
             price_cols = [
@@ -171,17 +191,32 @@ class DataLoaderCsv:
             location_cols = [
                 col
                 for col in df_copy.columns
-                if any(x in col.lower() for x in ["city", "location", "place", "town"])
+                if any(
+                    x in col.lower()
+                    for x in [
+                        "city",
+                        "location",
+                        "place",
+                        "town",
+                        "display_address",
+                        "address",
+                        "community",
+                        "area",
+                    ]
+                )
             ]
             if location_cols:
-                df_copy = df_copy.rename(columns={location_cols[0]: "city"})
+                first_col = location_cols[0]
+                df_copy["city"] = df_copy[first_col].map(_extract_city_from_location)
             else:
                 df_copy["city"] = "Unknown"
 
         if "rooms" not in df_copy.columns:
             # Try to find rooms column
             room_cols = [
-                col for col in df_copy.columns if "room" in col.lower() or "bedroom" in col.lower()
+                col
+                for col in df_copy.columns
+                if any(x in col.lower() for x in ["room", "bedroom", "bedrooms", "beds"])
             ]
             if room_cols:
                 df_copy = df_copy.rename(columns={room_cols[0]: "rooms"})
@@ -222,12 +257,33 @@ class DataLoaderCsv:
                     "bydgoszcz",
                     "lodz",
                 }
+                uae_cities = {
+                    "dubai",
+                    "abu dhabi",
+                    "sharjah",
+                    "ajman",
+                    "ras al khaimah",
+                    "ras al-khaimah",
+                    "fujairah",
+                    "umm al quwain",
+                    "umm al-quwain",
+                    "uae",
+                    "united arab emirates",
+                }
                 default_curr = (
                     "PLN"
                     if (
                         "city" in df_copy.columns
                         and any(
                             str(c).lower() in pl_cities
+                            for c in df_copy["city"].dropna().astype(str).unique()
+                        )
+                    )
+                    else "AED"
+                    if (
+                        "city" in df_copy.columns
+                        and any(
+                            str(c).lower() in uae_cities
                             for c in df_copy["city"].dropna().astype(str).unique()
                         )
                     )
@@ -268,6 +324,18 @@ class DataLoaderCsv:
                 }
             )
         )
+
+        # Normalize numeric fields (avoid str/int mismatches)
+        numeric_cols = ["price", "rooms", "area_sqm", "latitude", "longitude", "year_built"]
+        for col in numeric_cols:
+            if col in df_copy.columns:
+                cleaned = (
+                    df_copy[col]
+                    .astype(str)
+                    .str.replace(r"[^0-9\\.-]", "", regex=True)
+                    .replace({"": np.nan, "nan": np.nan})
+                )
+                df_copy[col] = pd.to_numeric(cleaned, errors="coerce")
 
         # Geocoordinates: fill latitude/longitude deterministically by city where missing
         city_coords = {

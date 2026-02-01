@@ -45,6 +45,7 @@ class Tool(str, Enum):
     COMPARATOR = "comparator"
     WEB_SEARCH = "web_search"
     MORTGAGE_CALC = "mortgage_calculator"
+    INVESTMENT_ANALYZER = "investment_analyzer"
 
 
 class QueryAnalysis(BaseModel):
@@ -147,6 +148,10 @@ class QueryAnalyzer:
         "mortgage",
         "interest",
         "loan",
+        "roi",
+        "yield",
+        "cap rate",
+        "cash flow",
         "рассчитать",
         "посчитать",
         "сколько",
@@ -169,6 +174,8 @@ class QueryAnalyzer:
         "analyze",
         "analysis",
         "insights",
+        "financial",
+        "finance",
         "средняя",
         "медиана",
         "статистика",
@@ -208,7 +215,7 @@ class QueryAnalyzer:
     PRICE_PATTERN = re.compile(r"\$?\d{1,5}(?:,\d{3})*(?:\.\d{2})?")
     ROOMS_PATTERN = re.compile(r"(\d+)[- ](?:bed(?:room)?|room|комнат|odalı)")
     CITY_PATTERN = re.compile(
-        r"\b(warsaw|krakow|gdansk|wroclaw|poznan|warszawa|kraków|gdańsk|wrocław|poznań|варшав|краков|гданьск|вроцлав|познан|varşova)\w*",
+        r"\b(warsaw|krakow|gdansk|wroclaw|poznan|warszawa|kraków|gdańsk|wrocław|poznań|варшав|краков|гданьск|вроцлав|познан|varşova|dubai|abu dhabi|sharjah|ajman|ras al khaimah|ras al-khaimah|fujairah|umm al quwain|uae)\w*",
         re.IGNORECASE,
     )
     # Added 'построен' (built) and 'yapı' (building/built) stems
@@ -228,6 +235,13 @@ class QueryAnalyzer:
         "Gdansk": ["gdansk", "gdańsk", "гданьск"],
         "Wroclaw": ["wroclaw", "wrocław", "вроцлав"],
         "Poznan": ["poznan", "poznań", "познан"],
+        "Dubai": ["dubai"],
+        "Abu Dhabi": ["abu dhabi", "abudhabi"],
+        "Sharjah": ["sharjah"],
+        "Ajman": ["ajman"],
+        "Ras Al Khaimah": ["ras al khaimah", "ras al-khaimah"],
+        "Fujairah": ["fujairah"],
+        "Umm Al Quwain": ["umm al quwain", "umm al-quwain"],
     }
 
     # Multilingual Amenities - using stems for better matching
@@ -451,6 +465,8 @@ class QueryAnalyzer:
         if intent == QueryIntent.CALCULATION:
             if "mortgage" in query_lower:
                 tools.append(Tool.MORTGAGE_CALC)
+            elif any(term in query_lower for term in ["roi", "yield", "cap rate", "cash flow"]):
+                tools.append(Tool.INVESTMENT_ANALYZER)
             else:
                 tools.append(Tool.CALCULATOR)
 
@@ -470,6 +486,9 @@ class QueryAnalyzer:
                 "news",
                 "right now",
                 "at the moment",
+                "palm jebel ali",
+                "dubai market",
+                "uae market",
                 "сейчас",
                 "сегодня",
                 "прямо сейчас",
@@ -501,6 +520,9 @@ class QueryAnalyzer:
                 "compute",
                 "percentage",
                 "ratio",
+                "roi",
+                "yield",
+                "cap rate",
             ]
         )
 
@@ -519,6 +541,10 @@ class QueryAnalyzer:
                 "news",
                 "right now",
                 "at the moment",
+                "palm jebel ali",
+                "dubai",
+                "uae",
+                "abu dhabi",
                 "сейчас",
                 "сегодня",
                 "прямо сейчас",

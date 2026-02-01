@@ -3,7 +3,7 @@ from typing import Dict, List, Sequence
 
 import pandas as pd
 from langchain.agents.agent_types import AgentType
-from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatOllama
 
 try:
     from langchain_experimental.agents import create_pandas_dataframe_agent
@@ -33,7 +33,7 @@ class RealEstateGPT:
         Parameters:
             df (pd.DataFrame | Sequence[pd.DataFrame]): The property dataset(s) to analyze.
                 Can be a single DataFrame or a sequence of DataFrames.
-            key (str): OpenAI API key for authentication.
+            key (str): Optional Ollama base URL override.
         """
         # Define system and user prompts for context
         self.system_msg = (
@@ -46,7 +46,8 @@ class RealEstateGPT:
         self.user_msg = "User: {query}"  # Format for user queries
         self.assistant_msg = "Assistant: Please keep responses relevant to real estate only."
 
-        os.environ["OPENAI_API_KEY"] = key
+        if key:
+            os.environ["OLLAMA_BASE_URL"] = key
 
         # Initialize the agent
         if create_pandas_dataframe_agent is None:
@@ -55,7 +56,11 @@ class RealEstateGPT:
                 "Install it to use RealEstateGPT dataframe agent features."
             )
         self.agent = create_pandas_dataframe_agent(
-            ChatOpenAI(temperature=0, model="gpt-3.5-turbo"),
+            ChatOllama(
+                temperature=0,
+                model=os.getenv("OLLAMA_DEFAULT_MODEL", "llama3.2:3b"),
+                base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+            ),
             df,
             verbose=False,
             agent_type=AgentType.OPENAI_FUNCTIONS,

@@ -51,6 +51,7 @@ reportlab==4.4.6
 rank_bm25==0.2.2
 openpyxl==3.1.5
 tabulate==0.9.0
+tavily-python==0.5.4
 
 # Excel file support (beyond openpyxl)
 odfpy>=1.4.1  # For .ods file support

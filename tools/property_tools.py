@@ -51,6 +51,79 @@ class LocationAnalysisInput(BaseModel):
     property_id: str = Field(description="Property ID to analyze", min_length=1)
 
 
+class InvestmentAnalysisInput(BaseModel):
+    """Input for investment analysis tool."""
+
+    property_price: float = Field(description="Total property price", gt=0)
+    monthly_rent: float = Field(description="Expected monthly rent", ge=0)
+    annual_costs: float = Field(
+        default=0.0, description="Estimated annual operating costs", ge=0
+    )
+    down_payment_percent: float = Field(
+        default=20.0, description="Down payment as percentage", ge=0, le=100
+    )
+    interest_rate: float = Field(
+        default=4.5, description="Annual interest rate as percentage", ge=0
+    )
+    loan_years: int = Field(default=30, description="Loan term in years", gt=0, le=50)
+
+
+class InvestmentAnalysisTool(BaseTool):
+    """Tool for basic investment and cashflow analysis."""
+
+    name: str = "investment_analyzer"
+    description: str = (
+        "Analyze investment metrics such as cap rate and cash-on-cash return. "
+        "Input should include property price, monthly rent, annual costs, down payment %, "
+        "interest rate %, and loan years."
+    )
+    args_schema: type[InvestmentAnalysisInput] = InvestmentAnalysisInput
+
+    def _run(
+        self,
+        property_price: float,
+        monthly_rent: float,
+        annual_costs: float = 0.0,
+        down_payment_percent: float = 20.0,
+        interest_rate: float = 4.5,
+        loan_years: int = 30,
+    ) -> str:
+        try:
+            mortgage = MortgageCalculatorTool.calculate(
+                property_price=property_price,
+                down_payment_percent=down_payment_percent,
+                interest_rate=interest_rate,
+                loan_years=loan_years,
+            )
+            annual_rent = monthly_rent * 12
+            net_operating_income = annual_rent - annual_costs
+            cap_rate = (net_operating_income / property_price) * 100
+            annual_debt_service = mortgage.monthly_payment * 12
+            annual_cashflow = net_operating_income - annual_debt_service
+            cash_invested = mortgage.down_payment
+            cash_on_cash = (
+                (annual_cashflow / cash_invested) * 100 if cash_invested > 0 else 0.0
+            )
+
+            return (
+                "Investment Analysis:\n"
+                f"- Annual rent: ${annual_rent:,.2f}\n"
+                f"- Annual operating costs: ${annual_costs:,.2f}\n"
+                f"- Net operating income: ${net_operating_income:,.2f}\n"
+                f"- Cap rate: {cap_rate:.2f}%\n"
+                f"- Annual debt service: ${annual_debt_service:,.2f}\n"
+                f"- Annual cashflow: ${annual_cashflow:,.2f}\n"
+                f"- Cash invested (down payment): ${cash_invested:,.2f}\n"
+                f"- Cash-on-cash return: {cash_on_cash:.2f}%"
+            )
+        except ValueError as e:
+            return f"Error: {str(e)}"
+        except Exception as e:
+            return f"Error analyzing investment: {str(e)}"
+
+    async def _arun(self, *args: Any, **kwargs: Any) -> str:
+        return self._run(*args, **kwargs)
+
 class MortgageResult(BaseModel):
     """Result from mortgage calculator."""
 
@@ -462,6 +535,7 @@ def create_property_tools(vector_store: Any = None) -> List[BaseTool]:
     """
     return [
         MortgageCalculatorTool(),
+        InvestmentAnalysisTool(),
         PropertyComparisonTool(vector_store=vector_store),
         PriceAnalysisTool(vector_store=vector_store),
         LocationAnalysisTool(vector_store=vector_store),
